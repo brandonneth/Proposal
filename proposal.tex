@@ -53,17 +53,54 @@ Any framework that supports only one or the other leaves potentially orders of m
 For this reason, I will support both types of transformations in an integrated framework.
 \paragraph{$\dots$ \textit{existing sparse and dense codes.}}
 Support for sparse and dense codes together means supporting a wider range of applications, especially those that use sparse data in some parts and dense in others.
+
 \section{Overview}
+
+My proposed project makes three main contributions.
+First, I will develop a framework for representing schedule and data transformations of the same underlying code. 
+Second, I will develop language level constructs for specifying those transformations.
+Third, I will develop a performance model to identify profitable transformations in addition to those specified by the programmer.
+
+\subsection{Integrating Schedule and Data Transformations}
+
+\subsection{Language Constructs and Extensions}
+
+\subsection{Performance Modeling Around User Declarations}
 
 \section{Intellectual Merit}
 
 
 \section{Broader Impacts}
 
-We are on the brink of climate catastrophe. 
-There can be no broader impact than helping avert it.
+
 
 \section{Research Plan}
+
+\subsection{Integrated Transformation Representation}
+
+\paragraph{Preliminary Results}
+
+\paragraph{Proposed Research}
+
+
+\subsection{Declarative Transformation API}
+
+\paragraph{Preliminary Results}
+I have published work that uses an imperative style API to represent loop transformations such as fusion and overlapped tiling~\cite{neth2021inter}.
+I also have submitted a paper to ICS22 that uses a declarative style API to represent data format transformations of dense data.
+\paragraph{Proposed Research}
+I propose to extend the declarative style API in my work under review to support schedule transformations as well as data transformations for sparse data.
+
+
+\subsection{Dynamic Performance Modeling}
+
+\paragraph{Preliminary Results}
+
+\paragraph{Proposed Research}
+
+
+
+
 
 
 \section{Project Milestones}
@@ -85,7 +122,6 @@ There can be no broader impact than helping avert it.
 \caption{Milestone overview}
 \label{MilestoneTable}
 \end{table*}
-\section{Preliminary Results}
 
 
 \section{Data Plan}
