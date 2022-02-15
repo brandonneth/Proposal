@@ -1,0 +1,96 @@
+\documentclass{article}
+
+\usepackage{xcolor}
+\usepackage{comment}
+\usepackage{graphicx}
+\usepackage{csquotes}
+\usepackage{balance}
+\usepackage{setspace}
+
+\usepackage{listings}
+\usepackage{subcaption}
+
+\usepackage{standalone}
+
+
+\newcommand{\todo}[1]{{\textcolor{red}{{\tt{TODO:}}\,\,#1 }}}
+\newcommand{\nc}[0]{\todo{cite}}
+\newcommand{\an}[1]{{\textcolor{blue}{Author's Note: #1}}}
+\newcommand{\ttt}[1]{{\texttt{#1}}}
+
+\author{Brandon Neth}
+\title{Dissertation Proposal}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+From optimizing wind-farm performance~\cite{sprague2020exawind} to understanding the dynamics of the watershed~\cite{olschanowsky2019hydroframe}\todo{cite parflow},
+high-performance computing (HPC) is a critical strategy for combatting the climate crisis. 
+When developing such applications, domain scientists often encounter the need to optimize or otherwise refactor their application code. 
+Generally, they have two options: learn how to optimize their code themselves or enlist the help of software engineers. 
+\todo{write off the enlisting a programmer line in a short sentence.} 
+For those that choose to tackle the problem themselves, challenge awaits. 
+
+Peculiars of the application and its implementation consume development time, often for improvements localized to a single machine. 
+Moreover, as computers develop and complexify post-Moore's Law, optimal performance hides behind a machine-specific balance of parallelism and data locality that most languages do not explicitly support; and 
+different parts of computations need different approaches to optimization, combining schedule transformations with data transformations on both dense and sparse code.
+In short, scientists need a concise, portable interface for optimizing their existing codes with varying levels of granularity.
+
+\textbf{I propose to develop a C++ extension that supports user-guided, model-supplemented optimization of loop schedule and program data for existing dense and sparse codes.}
+\paragraph{$\dots$ \textit{a C++ extension that} $\dots$}
+C++ is a industry standard programming language for high performance computing as well as a common standard for many introductory engineering and science computing courses.
+
+\paragraph{$\dots$ \textit{supports user-guided, model-supplemented optimization} $\dots$}
+While some users have an exact idea of the optimizations they want to use for each part of a computation, it should not be required that every optimizing transformation be user-specified. 
+Thus, I will expose all transformations as part of a succinct API while also augmenting the optimization process with estimates from a performance model. 
+This will enable users to specify as much or as little of the transformations as they like and have the model \enquote{fill in} the rest.
+
+\paragraph{$\dots$ \textit{of loop schedule and program data for} $\dots$}
+While loop schedule transformations are often critical to improving data locality and parallelism, data format is also a crucial consideration, especially in sparse codes. 
+Any framework that supports only one or the other leaves potentially orders of magnitude performance improvements on the table.
+For this reason, I will support both types of transformations in an integrated framework.
+\paragraph{$\dots$ \textit{existing sparse and dense codes.}}
+Support for sparse and dense codes together means supporting a wider range of applications, especially those that use sparse data in some parts and dense in others.
+\section{Overview}
+
+\section{Intellectual Merit}
+
+
+\section{Broader Impacts}
+
+We are on the brink of climate catastrophe. 
+There can be no broader impact than helping avert it.
+
+\section{Research Plan}
+
+
+\section{Project Milestones}
+
+\begin{table*}[h]
+    \centering
+\begin{tabular}{|p{2.5cm}|p{5cm}|c|c|p{3cm}|}
+    \hline
+    \textbf{Title} & Short Description & Start Date & End Date & Deliverable(s)\\
+    \hline
+    Hydrodynamics \linebreak Chapel Port & Porting key kernels of a hydrodynamics code from C to Chapel & May 2022 & August 2022 & Ported code, report on process \\
+    \hline
+    \todo{} & & & & \\
+    \hline
+    Final & Dissertation completed & \todo{} & May 2023 & Defended dissertation\\
+    \hline
+\end{tabular}
+
+\caption{Milestone overview}
+\label{MilestoneTable}
+\end{table*}
+\section{Preliminary Results}
+
+
+\section{Data Plan}
+
+All code related to my dissertation will be open source under the Atmosphere Software License, which imposes enforcable divestment obligations on the relicensing of software~\cite{atmospherelicense}. 
+\bibliographystyle{abbrv}
+\bibliography{proposal}
+\end{document}
