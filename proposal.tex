@@ -104,6 +104,7 @@ The second describes a related interface for specifying data transformations bet
 The third describes an approach to incorporating support for sparse data formats into the two previous interfaces. 
 
 \subsection{Proposed Research: Inter-loop Schedule Transformations in RAJA}
+\label{Sec:Work1}
 When parallelizing an application, loops are generally considered and
 parallelized one at a time.
 This reduces opportunities to leverage inter-loop data reuse.
@@ -443,7 +444,7 @@ Preliminary results show similar performance results with drastically fewer code
 
 
 \subsection{Proposed Research: Data Transformations in RAJA}
-
+\label{Sec:Work2}
 The layout of data in memory is a key consideration in high performance computing applications.
 From reducing cache and page misses to relieving pressure on memory bandwidth and avoiding inter-process communication, using a good data layout improves performance at all levels of an application.
 RAJA's Views incorporate data layout as part of their initialization, allowing a user to try out different layouts without major refactoring costs.
@@ -768,7 +769,7 @@ First, I will show how the model selects a data format.
 Then, I will show how the selected data format is applied to each View.
 
 Before we start, I restrict the problem to N-dimensional compressed sparse fiber, with arbitray dimension ordering. 
-In this restricted problem, compressed sparse row (CSR) is \verb.Format::CSF<0,1>. and compressed sparse column (CSC) is  \verb.Format::CSF<1,0>.
+In this restricted problem, compressed sparse row (CSR) is \verb.Format::CSF(0,1). and compressed sparse column (CSC) is  \verb.Format::CSF(1,0).
 
 \paragraph{Format Model:}
 This example's model has four values to identify:
@@ -815,18 +816,78 @@ Then the term in the objective function will be \verb.(ExecTime * A_size) * A_fm
 
 There will also need to be objective function terms for the cost of translating from one format to another. 
 
+\paragraph{Applying the Format}
+Once a format is selected, I need to propogate that format into the Views. 
+This problem is tied with how the accesses are made efficiently. 
+
 \section{Limitations}
 
 \section{Project Schedule}
+This section details the major milestones, deliverables, paper topics, and timeline for the completion of my dissertation. Note that the work from Sections \ref{Sec:Work1} and \ref{Sec:Work2} have already been submitted for publication.
 
-\subsection{Main Paper Topics}
+\subsection{Tasks and Deliverables}
 
-\subsection{Milestones}
+I break this project into a number of task-deliverable pairs.
+While their presentation is strictly ordered, the true ordering is only partial. Progress on the tasks is co-iterative.
 
+\paragraph{Evaluation Kernel Collection}
+The first task is the curation of example computations for the evaluation of my approach. 
+These kernels (which may be composed of multiple loop nests) will exhibit a variety of access patterns, dependence patterns, and scheduling choices. 
+Along with the computations will be data representative of the applications from which the computations are derived. 
+While some kernels may be derived from common linear algebraic operations, such as SpMV, these will be paired with data derived from applications that use the operation.
+I aim to curate 100\% of the computations from codes related to fighting the climate crisis.
 
+The deliverable associated  with this task is an open-source\footnote{See Section~\ref{Sec:DataPlan} for details} repository with the example computations implemented in RAJA in a format-\textit{dependent} way. 
+The repository will provide a containerized instance that can be run using Docker.
+This repository will constitute the baseline against which my system will be compared.
+
+\paragraph{Sparse Data Formats}
+The second task is the implementation of sparse data formats within RAJA.
+To keep the scale of the project manageable in the time available, I restrict this step to a proof of concept for N-dimensional compressed sparse fiber (CSF) and Dense formats.  
+While this implementation will not include performance modeling or automatic format conversion, it will form the basis upon which the modeling is built.
+In addition to the implementation of the data formats themselves, this task also includes the implementation of the different access logic for efficient/inefficient traversal orders, as well as the preparation of Views for traversal.
+
+The deliverable associated with this task is another open-source repository, this time containing implementations of the example computations in a format-\textit{independent} way.
+It is likely that this deliverable will be the same repository as the previous task.
+\paragraph{Model-Driven Format Conversion}
+The third task is the implementation of model-driven format conversion within RAJA. 
+As with the dense variant in Section~\ref{Sec:Work2}, this task will involve the normalization of each View's traversal order, development of the ILP constraints, dynamic cost estimation for using different formats, and development of the ILP objective function based on the cost estimations.
+
+The deliverable associated with this task is a similar repository to the previous deliverables.
+These implementations of the example computations will use the model-driven system to specify format changes.
+Additionally, this deliverable will include an evaluation of the model accuracy, locating the model's choices in the space of all possible choices.
+
+\paragraph{Written Dissertation}
+The final task is the writing of the complete dissertation on the work I have undertaken during my PhD studies.
+This task will also include writing and submitting a third paper to a peer-reviewed venue.
+The deliverable for this task is a third peer-reviewed publication and my complete, defended dissertation. 
+\subsection{Timeline}
+
+\paragraph{Summer 2022:} 
+I will be doing an internship at HPE working on the Chapel programming language~\cite{diaconescu2007approach} from May to August of 2022.
+During this time, I will be focusing on two main tasks.
+First, I will be working with climate scientists to explore how their codes may be ported from their current implementations into Chapel. 
+While porting their code, I will be making special effort to extract example kernels from their codes that may be implemented in RAJA.
+Second, I will be looking at how to incorporate the ideas from \ref{Sec:Work1} and \ref{Sec:Work2} into Chapel. 
+Those approaches were designed to be applicable in a number of languages and this will be put to the test this summer.
+
+During this time, I will also be working on implementing the sparse data formats within RAJA. While I aim to complete this task during the Summer, it may continue into the Fall.
+
+Furthermore, in service of not entering Spring 2023 with no writing done, I will be participating in a daily writing activity.
+Each work day, I will spend at minimum 15 minutes writing about the work I am doing.
+From May through August, this amounts to 1,275 minutes of writing.
+This will also assist in preparing me for a third submission to a peer-reviewed venue.
+\paragraph{Fall 2022:} 
+During the Fall of 2022, I will complete any remaining work on implementing the sparse data formats.
+Additionally, I will implement the model-driven format conversion system.
+I will continue the daily writing activity, with the expectation that the time spent writing will increase as the semester continues, as submissions for peer-reviewed venues are due in the last months of the fall and the first months of the new year. 
+
+\paragraph{Spring 2023:}
+The final semester of my studies will be spent focusing on evaluating my contributions, submitting a paper to ICS2023, and writing the final dissertation. 
+The submission deadline for ICS is normally the end of January or the beginning of February, so the first month of the Spring 2023 semester will be focused on preparing that submission and the later months on writing my dissertation.
 
 \section{Data Plan}
-
+\label{Sec:DataPlan}
 All code related to my dissertation will be open source under the Atmosphere Software License, which imposes enforcable divestment obligations on the relicensing of software~\cite{atmospherelicense}. 
 \section{Conclusion}
 
