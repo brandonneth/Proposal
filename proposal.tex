@@ -752,11 +752,33 @@ chain();
 
 \paragraph{Related Work}
 
+A number of works provide frameworks for describing different sparse data formats. 
+Ahmed et al.~\cite{ahmed2000framework} presents a combined framework for describing sparse matrix indexing structures and generating sparse implementations from dense computation descriptions.
+In their framework, sparse formats are described in terms of the relationship between different dimensions. For example, CSR has the index structure $r \rightarrow c \rightarrow v$, indicating rows must be accessed first, then the columns and values can be enumerated.
+ADditionally, each dimension of the representation can be annotated with information about the enumeration order (random-access, increasing-order-only, etc.) and the enumeration bounds (triangularity).
+The implementation of this framework is described in more detail in~\cite{mateev2000next}.
+A key concept in this framework is having a random access view of the data for algorithm writers and a sequential access view for the compiler.
+The compiler can then use the sequential access logic when the computation allows and can fall back on the random-access logic if necessary. 
+My approach uses a similar multi-logic access.
+
+Chou, Kjolstad, and Amarasinghe~\cite{chou2018format} describe an alternative framework for describing sparse formats in the context of tensor algebra. 
+In this framework, sparse formats are broken into individual dimensions which have one of six level formats. 
+These level formats each have traversal logic that enable the generation of arbitrary iteration code for the format.
+In contrast to my proposed approach, this framework relies heavily on a code generation step, as it is a component of Taco.
+
+Popoola~\nc presents an approach for generating code for converting between different sparse formats.
+Based on the Sparse Polyhedral Framework~\cite{strout2018sparse}, sparse formats are described using a number of relations between data and indices. 
+By composing relations that use the dense format as an intermediary, Popoola generates efficient transformations between arbitrary dense formats.
+
 \todo{libraries}
-\todo{spf}
-\todo{taco}
+
+
+
+
 \todo{augustine2019}
+
 \todo{taichi}
+
 
 
 Magic table entries: support for arbitrary dependences, 
