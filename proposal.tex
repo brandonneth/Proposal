@@ -6,11 +6,13 @@
 \usepackage{csquotes}
 \usepackage{balance}
 \usepackage{setspace}
-
+\usepackage{amssymb}
 \usepackage{listings}
 \usepackage{subcaption}
 
 \usepackage{standalone}
+\usepackage[left=1in,right=1in,top=1in,bottom=1in]{geometry}
+
 \lstset{ %
 language=C++,                % choose the language of the code
 basicstyle=\ttfamily\footnotesize,       % the size of the fonts that are used for the code
@@ -41,34 +43,42 @@ escapeinside={<@}{@>}
 \newcommand{\an}[1]{{\textcolor{blue}{Author's Note: #1}}}
 \newcommand{\ttt}[1]{{\texttt{#1}}}
 
+\newcommand{\yes}[0]{$\checkmark$}
+\newcommand{\no}[0]{$\times$}
 \author{Brandon Neth}
 \title{Dissertation Proposal}
 
 \begin{document}
 \maketitle
 
+
+
 \begin{abstract}
-    good stuff.
+From optimizing wind-farm performance~\cite{sprague2020exawind} to understanding the dynamics of the watershed~\cite{olschanowsky2019hydroframe,}
+high-performance computing (HPC) is a critical strategy for combatting the climate crisis. 
+Contributors, not always programmers by trade, need to balance developer productivity, application performance, and cross-system portability.
+A powerful approach to achieving this balance is to decouple the different parts of describing a computation. 
+Instead of writing one monolithic computation, programmers separate the descriptions of the operation, the data format, and the execution schedule.
+RAJA, an embedded language within C++, provides an interface for this type of decoupling.
+However, RAJA lacks constructs for leveraging a key source of performance improvement: inter-kernel data reuse.
+I propose the introduction of constructs to enable portable specification of cross-kernel optimizations for both sparse and dense codes.
+I break this extension of RAJA into three parts. 
+First, I develop support for cross-kernel schedule transformations of dense codes, like loop fusion and overlapped tiling.
+Second, I develop support for inter-kernel data transformations in dense codes, specifically dimensional reordering.
+Finally, I extend these transformations into the space of sparse codes.
+
+
+
 \end{abstract}
 
 
 
 \section{Introduction}
-From optimizing wind-farm performance~\cite{sprague2020exawind} to understanding the dynamics of the watershed~\cite{olschanowsky2019hydroframe}\todo{cite parflow},
-high-performance computing (HPC) is a critical strategy for combatting the climate crisis. 
 
 
 
 
-When developing such applications, domain scientists often encounter the need to optimize or otherwise refactor their application code. 
-Generally, they have two options: learn how to optimize their code themselves or enlist the help of software engineers. 
-\todo{write off the enlisting a programmer line in a short sentence.} 
-For those that choose to tackle the problem themselves, challenge awaits. 
 
-Peculiars of the application and its implementation consume development time, often for improvements localized to a single machine. 
-Moreover, as computers develop and complexify post-Moore's Law, optimal performance hides behind a machine-specific balance of parallelism and data locality that most languages do not explicitly support; and 
-different parts of computations need different approaches to optimization, combining schedule transformations with data transformations on both dense and sparse code.
-In short, scientists need a concise, portable interface for optimizing their existing codes with varying levels of granularity.
 
 
 \textbf{I propose to develop a C++ extension that supports user-guided, model-supplemented optimization of loop schedule and program data for existing dense and sparse codes.}
@@ -95,15 +105,18 @@ My proposed dissertation will make the following contributions:
 \begin{itemize}
 \item 
 \end{itemize}
+
+
+
+
 \section{Research Plan}
 This section details the research plan for the work proposed in the next three subsections. 
-The first presents an approach to delaying kernel execution in RAJA to enable analysis and transformation.
-The first describes an interface for specifying schedule transformations across multiple kernels in RAJA, such as loop fusion. 
+The first describes an interface for specifying schedule transformations across multiple kernels in RAJA, such as loop fusion, and . 
 It also presents background on RAJA itself and some other underlying contributions utilized throughout this proposal.
 The second describes a related interface for specifying data transformations between kernels in a declarative fashion. 
 The third describes an approach to incorporating support for sparse data formats into the two previous interfaces. 
 
-\subsection{Proposed Research: Inter-loop Schedule Transformations in RAJA}
+\subsection{Inter-loop Schedule Transformations in RAJA}
 \label{Sec:Work1}
 When parallelizing an application, loops are generally considered and
 parallelized one at a time.
@@ -233,6 +246,7 @@ This leads us to a number of research questions:
 
 \paragraph{Proposed Solution:}
 
+
 My proposed approach has a number of components.
 To address the need for a delay between the computation's description and execution, I propose the introduction of a wrapper object that holds the computation description until it is executed.
 These wrapper objects are created by a function, \verb.make_kernel., with the same interface as the standard \verb.kernel. call. 
@@ -315,6 +329,7 @@ IndexExpression : IndexOperand Operator IndexExpression | IndexOperand
 IndexOperand : Int | Double | Iterator
 \end{lstlisting}
 \end{figure}
+
 
 \paragraph{Related Work:}
 
@@ -770,6 +785,7 @@ Popoola~\nc presents an approach for generating code for converting between diff
 Based on the Sparse Polyhedral Framework~\cite{strout2018sparse}, sparse formats are described using a number of relations between data and indices. 
 By composing relations that use the dense format as an intermediary, Popoola generates efficient transformations between arbitrary dense formats.
 
+
 \todo{libraries}
 
 
@@ -777,12 +793,36 @@ By composing relations that use the dense format as an intermediary, Popoola gen
 
 \todo{augustine2019}
 
-\todo{taichi}
+
+
+Taichi~\cite{hu2019taichi} is a programming language for spatially sparse (globally sparse, locally dense) computations.
+Embedded into C++, computations are expressed as format-agnostic kernels, which are then optionally annotated with optimizations.
+Then, the Taichi compiler lowers the frontend code to an intermediate representation and finally to standard C++ or CUDA code. 
+Then, this generated code is compiled using a standard C++ compiler.
+In contrast, my approach is wholly contained within standard C++, avoiding the need to add additional configuration, building, or linking.
+\todo{How taichi does format description}
 
 
 
-Magic table entries: support for arbitrary dependences, 
 
+
+
+
+
+\begin{table}
+\begin{tabular}{|c|c|c|c|}
+\hline
+Approach & Format-agnostic representation & Tensor expressions & Arbitrary dependences \\
+\hline
+Taco~\cite{kjolstad2017tensor} & \yes & \yes & \no \\
+Taichi~\cite{hu2019taichi} & \yes & \yes & \yes \\
+\cite{ahmed2000framework} & \yes & \yes & \yes \\ 
+My Approach & & & 
+    
+\end{tabular}
+\caption{Table of capabilities for different approaches}
+\label{MagicTable}
+\end{table}
 \subsection{Complete Example}
 
 Start with the SpMM implementation from Listing~\ref{SparseMMRaja}.
