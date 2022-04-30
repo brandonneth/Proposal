@@ -1,16 +1,18 @@
 \documentclass{article}
 
-\usepackage{xcolor}
+\usepackage[table]{xcolor}
 \usepackage{comment}
 \usepackage{graphicx}
 \usepackage{csquotes}
 \usepackage{balance}
 \usepackage{setspace}
 \usepackage{amssymb}
+\usepackage{amsmath}
 \usepackage{listings}
 \usepackage{subcaption}
-
+\usepackage{algorithmicx}
 \usepackage{standalone}
+
 \usepackage[left=1in,right=1in,top=1in,bottom=1in]{geometry}
 
 \lstset{ %
@@ -54,21 +56,19 @@ escapeinside={<@}{@>}
 
 
 \begin{abstract}
-From optimizing wind-farm performance~\cite{sprague2020exawind} to understanding the dynamics of the watershed~\cite{olschanowsky2019hydroframe,}
+From optimizing wind-farm performance~\cite{sprague2020exawind} to understanding the dynamics of the watershed~\cite{olschanowsky2019hydroframe,condon2013implementation}
 high-performance computing (HPC) is a critical strategy for combatting the climate crisis. 
 Contributors, not always programmers by trade, need to balance developer productivity, application performance, and cross-system portability.
 A powerful approach to achieving this balance is to decouple the different parts of describing a computation. 
 Instead of writing one monolithic computation, programmers separate the descriptions of the operation, the data format, and the execution schedule.
-RAJA, an embedded language within C++, provides an interface for this type of decoupling.
+RAJA, a portable parallel library for C++, provides an interface for this type of decoupling.
 However, RAJA lacks constructs for leveraging a key source of performance improvement: inter-kernel data reuse.
-I propose the introduction of constructs to enable portable specification of cross-kernel optimizations for both sparse and dense codes.
-I break this extension of RAJA into three parts. 
-First, I develop support for cross-kernel schedule transformations of dense codes, like loop fusion and overlapped tiling.
-Second, I develop support for inter-kernel data transformations in dense codes, specifically dimensional reordering.
-Finally, I extend these transformations into the space of sparse codes.
-
-
-
+I propose the introduction of constructs to enable portable specification of cross-kernel optimizations for both dense and sparse codes.
+My key research question is: how do we enable program analyses and transformations in the context of a library rather than a compiler?
+I will answer this question with three contributions.
+My first contribution is a framework for supporting cross-kernel schedule transformation techniques in the library, specifically RAJA, rather than in the compiler. 
+My second contribution builds on this approach to allow developers to make data layout transformations, chosen by themselves or by a performance model.
+My final contribution extends the schedule and layout transformation frameworks to support sparse codes.
 \end{abstract}
 
 
@@ -80,43 +80,16 @@ Finally, I extend these transformations into the space of sparse codes.
 
 
 
-
-\textbf{I propose to develop a C++ extension that supports user-guided, model-supplemented optimization of loop schedule and program data for existing dense and sparse codes.}
-\paragraph{$\dots$ \textit{a C++ extension that} $\dots$}
-C++ is a industry standard programming language for high performance computing as well as a common standard for many introductory engineering and science computing courses.
-
-\paragraph{$\dots$ \textit{supports user-guided, model-supplemented optimization} $\dots$}
-While some users have an exact idea of the optimizations they want to use for each part of a computation, it should not be required that every optimizing transformation be user-specified. 
-Thus, I will expose all transformations as part of a succinct API while also augmenting the optimization process with estimates from a performance model. 
-This will enable users to specify as much or as little of the transformations as they like and have the model \enquote{fill in} the rest.
-
-\paragraph{$\dots$ \textit{of loop schedule and program data for} $\dots$}
-While loop schedule transformations are often critical to improving data locality and parallelism, data format is also a crucial consideration, especially in sparse codes. 
-Any framework that supports only one or the other leaves potentially orders of magnitude performance improvements on the table.
-For this reason, I will support both types of transformations in an integrated framework.
-\paragraph{$\dots$ \textit{existing sparse and dense codes.}}
-Support for sparse and dense codes together means supporting a wider range of applications, especially those that use sparse data in some parts and dense in others.
-
-
-
-
-\paragraph{Contributions:}
-My proposed dissertation will make the following contributions:
-\begin{itemize}
-\item 
-\end{itemize}
-
-
-
-
 \section{Research Plan}
 This section details the research plan for the work proposed in the next three subsections. 
-The first describes an interface for specifying schedule transformations across multiple kernels in RAJA, such as loop fusion, and . 
+The first describes an interface for specifying schedule transformations across multiple kernels in RAJA, such as loop fusion and overlapped tiling. 
 It also presents background on RAJA itself and some other underlying contributions utilized throughout this proposal.
 The second describes a related interface for specifying data transformations between kernels in a declarative fashion. 
 The third describes an approach to incorporating support for sparse data formats into the two previous interfaces. 
 
-\subsection{Inter-loop Schedule Transformations in RAJA}
+\paragraph{Overarching Research Question:} How do we enable program analyses and transformations in the context of a library rather than a compiler?
+
+\subsection{Completed Research: Inter-loop Schedule Transformations in RAJA}
 \label{Sec:Work1}
 When parallelizing an application, loops are generally considered and
 parallelized one at a time.
@@ -130,11 +103,11 @@ each loop independently.
 
 Implementing these transformations by hand involves significant modification to what can be the most important part of a computation, opening up new avenues for bugs. 
 Especially in the context of RAJA applications, where performance portability is paramount and such a transformation may only be beneficial on some systems, the increased fragility may not be worth the performance benefits. 
-Thus, I propose an interface for specifying inter-loop optimizations in RAJA that imposes a minimal code delta on the developer, incorporates safety checks, and requires no additional compilation steps. 
+Thus, I developed an interface for specifying inter-loop optimizations in RAJA that imposes a minimal code delta on the developer, incorporates safety checks, and requires no additional compilation steps. 
 
 \paragraph{Context and Background:}
 
-I begin with an example of how to use RAJA. We will be converting a standard C++ implementation of the \verb.HYDRO_2D. benchmark into RAJA. 
+I begin with an example of how to use RAJA. I will be converting a standard C++ implementation of the \verb.HYDRO_2D. benchmark into RAJA. 
 \verb.HYDRO_2D. is a typical stencil kernel extracted from a hydrodynamics code. 
 Listing~\ref{HydroCpp} shows the C++ implementation we will convert.
 Listing~\ref{HydroRaja} shows the RAJA implementation.
@@ -215,14 +188,14 @@ kernel<POL>(segment_tuple, lambda3);
 
 
 RAJA achieves performance portability by separating the specification of the computation from its schedule.
-This is reflected in our refactoring process.
-We will work with the first loop in the benchmark as an example.
-First, we extract a lambda describing the computation to be run each iteration of the loop.
+This is reflected in the refactoring process.
+I will work with the first loop in the benchmark as an example.
+First, I extract a lambda describing the computation to be run each iteration of the loop.
 This can be seen in lines 1 through 6 of Listing~\ref{HydroRaja}.
-Second, we define the iteration space of the computation using a tuple of iterators. 
-These three loops have the same iteration space, so we can define one tuple and reuse it for each computation.
+Second, I define the iteration space of the computation using a tuple of iterators. 
+These three loops have the same iteration space, so I can define one tuple and reuse it for each computation.
 The definition of the two dimensions and the complete tuple can be seen in lines 22 through 24 of Listing~\ref{HydroRaja}.
-Finally, we define the kernel's policy, which describes how each level of the computation should be executed. 
+Finally, I define the kernel's policy, which describes how each level of the computation should be executed. 
 The policy shown on lines 26 through 32 indicates that the outermost loop should be run in parallel using OpenMP, while the inner loop should be vectorized.
 With the three components now defined, we can execute the kernels using the \verb.kernel. function, shown on lines 34 through 36.
 This function immediately executes the specified computation.
@@ -235,20 +208,21 @@ The use of Views rather than direct arrays is a key component to this proposal, 
 \paragraph{Research Problems:}
 The \verb.HYDRO_2D. benchmark shows significant data reuse across its three loops.
 A loop transformation like overlapped tiling can leverage this reuse to improve performance.
-However, because we have converted each loop one at a time, we have siloed the different stages of the computation, inhibiting any optimization across the stages.
-Furthermore, because RAJA \verb.kernel. calls immediately execute the computation in question, we cannot perform any analysis or transformation beforehand.
-This leads us to a number of research questions:
+However, because I have converted each loop one at a time, I have siloed the different stages of the computation, inhibiting any optimization across the stages.
+Furthermore, because RAJA \verb.kernel. calls immediately execute the computation in question, I cannot perform any analysis or transformation beforehand.
+This leads to a number of research questions:
 \begin{itemize}
-\item How do we delay the execution of a computation so we can apply transformations?
-\item How can we best add an inter-loop context to RAJA to facilitate transformations like overlapped tiling?
-\item How do we check that transformations are safe to apply?
+\item R1.1: How do we delay the execution of a computation so we can apply transformations?
+\item R1.2: How can we best add an inter-loop context to RAJA to facilitate transformations like overlapped tiling?
+\item R1.2: How do we check that transformations are safe to apply using information gathered only at runtime?
+\item R1.4: How do we do this without sacrificing the performance improvements the transformations are meant to achieve?
 \end{itemize}
 
-\paragraph{Proposed Solution:}
+\paragraph{Developed Solution:}
 
 
-My proposed approach has a number of components.
-To address the need for a delay between the computation's description and execution, I propose the introduction of a wrapper object that holds the computation description until it is executed.
+My approach has a number of components.
+To address the need for a delay between the computation's description and execution, I introduced a wrapper object that holds the computation description until it is executed.
 These wrapper objects are created by a function, \verb.make_kernel., with the same interface as the standard \verb.kernel. call. 
 These kernel objects can be executed using the call operator.
 Such an interface minimizes the code changes required to use it.
@@ -270,12 +244,12 @@ knl3();
     \end{lstlisting}
 \end{figure}
 
-To address the need for an inter-loop context to facilitate transformations, I propose specialized functions for each transformation. 
+To address the need for an inter-loop context to facilitate transformations, I developed specialized functions for each transformation. 
 Taking loop fusion as an example, the \verb.fuse. function takes a number of kernel objects as arguments and returns a new computation object that executes those kernels as a single fused computation. 
 
-Lastly, to ensure the safety of the transformations, I propose the introduction of a symbolic evaluation system into RAJA.
+Lastly, to ensure the safety of the transformations, I introduced a symbolic evaluation system into RAJA.
 This is where RAJA's View class comes into play. 
-By overloading the View's call operator for a symbolic iterator type, we can gather access information without modifying any of the underlying data. 
+By overloading the View's call operator for a symbolic iterator type, I can gather access information without modifying any of the underlying data. 
 
 %begin copy from rajalc paper
 
@@ -333,89 +307,6 @@ IndexOperand : Int | Double | Iterator
 
 \paragraph{Related Work:}
 
-Some work has experimented with overlapped tiling and other inter-loop
-scheduling by hand.
-Olschanowsky et al.~\cite{CathieSC14} showed that scheduling across loops and
-reducing the temporary storage requirements led to problem size scaling and
-significantly better performance in a CFD application.
-Wahib and Maruyama~\cite{Wahib14} showed the importance of fusing kernel
-computations for GPU execution.
-
-Numerous approaches to scheduling across an outer ``time loop" in a stencil
-code have been investigated as early as 1998~\cite{Bassetti98,Wonnacott00}.  
-The Cactus project~\cite{Ripeanu2001,Allen00cactus-gtoolkit} and 
-Ding and He~\cite{Ding2001} demonstrated  overlapped tiling by expanding
-ghost cells in stencil computations. 
-Wonnacott and Strout~\cite{Wonnacott13} review many other approaches to
-time tiling for PDE codes that do explicit stepping versus implicit stepping.
-
-A number of DSLs have been developed for specifying and
-optimizing stencil computations.
-The Pochoir work~\cite{Tang2011} embedded cache oblivious performance
-optimizations to improve temporal locality in C++ code.
-STELLA~\cite{Gysi2015}  and YASK~\cite{YASK2016} can specify and 
-tune 3D finite difference stencil computations.
-Rawat et al.~\cite{Rawat18} present a DSL called StencilGen for specifying
-stencil computations.
-They present algorithms that perform overlapped tiling within stencil
-computations and heuristics for fusing between the computations for GPUs.
-Their work demonstrates some possible performance benefits of scheduling
-across stencil computations when targeting GPUs and CPUs. In contrast,
-we present ways to enable and to control these optimizations across loops
-in the context of a more general, parallel library, specifically RAJA.
-
-LIFT~\cite{Hagedorn2018} is a data parallel, functional intermediate
-representation that supports dense computations and stencil computations.
-Once a computation written in a DSL is transformed to LIFT, pattern-based
-transformation can implement optimizations such as overlapped tiling and
-target many different architectures.
-Krishnamoorthy et al.~\cite{Krishnamoorthy07} present an automated tiling
-technique for stencil computations in which neighboring tiles perform
-overlapping computations, which reduces communication and improves load
-balance.
-
-%[Image processing pipelines, which are also stencil applications.  
-Embedded DSLs for image processing pipelines, such as
-Halide~\cite{Ragan-Kelley2012,Ragan-Kelley2013} and
-PolyMage~\cite{Mullapudi2015}, support orthogonally specifying and
-scheduling stencil computations.
-By exposing separate mechanisms for scheduling them, PolyMage supports
-various scheduling, fusion, and tile size selection
-algorithms~\cite{Mullapudi2016,Jangda2018,Adams2019}.
-%BRANDON: Adding differentiation
-However, using these embedded DSLs limits the expressible computation and requires prohibitive porting costs for large applications.
-%Jangda and Bondhugula~\cite{Jangda2018} have developed heuristics for selecting tile sizes and
-%fusing across image processing pipelines.
-%[Compiler techniques that schedule across loops.  Requires code to be quite simple to be analyzed and 
-%there have been a number of different heuristics for deciding when to fuse.]
-
-%[DNNs optimizing across loops]
-Several DSLs that specify deep learning neural network
-architectures, including Halide extended for reverse mode automatic
-differentiation~\cite{Li2018}, Tensor Comprehensions~\cite{Vasilache2018},
-TVM~\cite{TVM2018} and Latte~\cite{TruongLatte2016} optimize across loops.
-These DSLs have specific approaches to scheduling such as the Halide scheduling
-algorithm for DNN~\cite{Yang2020}.
-AutoTVM in TVM~\cite{Chen2019} learns how to schedule.
-Frameworks like Delite~\cite{Sujeeth2014} for developing DSLs support 
-cross-computation scheduling.
-
-Although the DSL approach can better target a particular application domain,
-our work to schedule across loops within RAJA supports a broader class of
-applications.
-Further, we provide a different separation of concerns. RAJA handles
-performance portability while our loop chain extension handles scheduling
-across loops.
-DSL approaches handle all of the scheduling and targeting of architectures,
-which leads to not all architectures being covered in some cases.
-
-The most related work to this submission is work that more generally gathers
-a computational representation and other work that aims to specify and
-optimize loop chains.
-Lightweight modular staging~\cite{LMS2012} presented an approach for gathering 
-a representation of computation to enable scheduling across that implementation
-in Scala.
-
 Bertolacci et al.~\cite{Bertolacci2016,Bertolacci2019} propose extensions to
 OpenMP pragmas to express and schedule loop chains.
 The approach requires annotations about data accesses in the pragmas.
@@ -431,34 +322,56 @@ Luporini et al. use various Python library interfaces to specify computations
 using per-loop modularization and then a lazy-computation step that gathers
 the loop descriptions and generates inspector-executor code for performing 
 sparse tiling.
-%% BRONIS: The following does not seem necessary; is not discussed
-%% \begin{verbatim}
-%%    with loop_chain(name, tile_size, fusion_scheme, ...):
-%%        <some PyOP2 parallel loops>
-%% \end{verbatim}
 The key differences between their work and ours is that we leverage the view 
 capability of RAJA to avoid needing to annotate how data is being accessed
 in each loop.  
 Instead, our symbolic analysis collects that information.
 
-%End copy from RAJALC paper
-
 \paragraph{Evaluation:}
 
-Two metrics will be used to evaluate this proposed research: performance improvement and code delta. 
-For both metrics, I will look at three variants of each evaluated code.
-The first variant will be the original RAJA implementation. 
-The second variant will be the original RAJA implementation, modified to implement the transformation by hand.
-The third variant will implement the transformation using my contribution.
+Two metrics are used to evaluate this proposed research: performance improvement and code delta. 
+For both metrics, I look at three variants of each evaluated code.
+The first variant is the original RAJA implementation. 
+The second variant is the original RAJA implementation, modified to implement the transformation by hand.
+The third variant implements the transformation using my contribution.
 
-I will look at the execution time for single-node executions, comparing the execution times among the three variants. My contribution is expected to provide slightly lower performance improvements than the hand-implemented variant, due to overhead of the system.
+I look at the execution time for single-node executions, comparing the execution times among the three variants. My contribution provides slightly lower performance improvements than the hand-implemented variant, due to overhead of the system.
 
-I will also compare the difference in the source lines of code changed to implement each variant.
+I also compare the difference in the source lines of code changed to implement each variant.
+
 \paragraph{Preliminary Results:}
 Preliminary results show similar performance results with drastically fewer code changes.
+\todo{add figures from \cite{neth2021inter}}
+
+\begin{figure}
+\includegraphics[width=0.5\textwidth]{RAJALC-perf-system-1.png}
+\caption{Performance changes of RAJAPerf benchmarks on System Intel1 (higher is better).}
+\label{RAJAPerfPerf}
+\end{figure}
 
 
-\subsection{Proposed Research: Data Transformations in RAJA}
+\begin{table}[t]
+    \begin{tabular}{|l|l|l|l|l|}
+    \hline
+    \textbf{Benchmark}       & \multicolumn{2}{l|}{\textbf{\begin{tabular}[c]{@{}l@{}}Manual \\ Implementation\end{tabular}}} & \multicolumn{2}{l|}{\textbf{\begin{tabular}[c]{@{}l@{}}RAJALC\\ Implementation\end{tabular}}} \\ \hline
+    \cellcolor[HTML]{9B9B9B} & Changed                                         & Added                                        & Changed                                        & Added                                        \\ \hline
+    \textit{ENERGY}          & 6                                               & 6                                            & 6                                              & 2                                            \\
+    \textit{PRESSURE}        & 2                                               & 3                                            & 2                                              & 2                                            \\
+    \textit{GEN\_LIN\_RECUR} & 1                                               & 1                                            & 2                                              & 2                                            \\
+    \textit{FDTD\_2D}        & 8                                               & 4                                            & 9                                              & 4                                            \\
+    \textit{HYDRO\_2D}       & 4                                               & 41                                           & 3                                              & 2                                            \\
+    \textit{JACOBI\_1D}      & 3                                               & 17                                           & 3                                              & 3                                            \\
+    \textit{JACOBI\_2D}      & 10                                              & 33                                           & 10                                             & 3                                            
+    \\
+    \textit{HEAT\_3D}        & 12                                              & 38                                           & 12                                             & 3                                            \\ \hline
+    \textit{Average}        & 5.8                                              & 17.9                                           & 5.9                                            & 2.6                                            \\ \hline
+    %\textit{Average}        & 5.75                                              & 17.875                                           & 5.875                                            & 2.625                                            \\ \hline
+    \end{tabular}
+    \caption{Lines of Code Impact to implement transformations by hand and with RAJALC.}\label{sloc}
+    \end{table}
+
+
+\subsection{Work in Progress: Data Transformations in RAJA}
 \label{Sec:Work2}
 The layout of data in memory is a key consideration in high performance computing applications.
 From reducing cache and page misses to relieving pressure on memory bandwidth and avoiding inter-process communication, using a good data layout improves performance at all levels of an application.
@@ -467,8 +380,7 @@ However, some applications benefit from changing the data layout mid-computation
 Implementing such a mid-computation layout change in RAJA can improve performance, but is laborious to implement and lacks portability.
 Thus, I propose introducing a lightweight, declarative API for changing data layouts between computations.
 Furthermore, I propose developing a performance model for layouts using the loop bounds and data access order as input and a runtime interface that dynamically estimates performance to select an appropriate layout. 
-These systems combine so that the model and runtime \enquote{fill in} layout choices
-that the user did not specify.
+These systems combine so that the model and runtime \enquote{fill in} layout choices that the user did not specify.
 
 \paragraph{Context and Background:}
 
@@ -488,10 +400,11 @@ As the graph shows, performance improves  significantly (72\%) simply by changin
 \end{figure}
 
 \paragraph{Related Work}
-Although controlling data layout is quite important, the options programmers have to control
-data layouts in coordination with loop schedules have limitations.
-Compiler optimizations such as loop permutation have been developed to change loop
-schedules so that a loop traversal order better aligns with data layout.
+
+\todo{Copy new related work stuff here.}
+
+Although controlling data layout is quite important, the options programmers have to control data layouts in coordination with loop schedules have limitations.
+Compiler optimizations such as loop permutation have been developed to change loop schedules so that a loop traversal order better aligns with data layout.
 However, general purpose compilers 
 (1) have difficulties analyzing for the relationship between
 data layout and schedule due to challenges like aliasing~\cite{hind2001pointer} and lack of multidimensional arrays in 
@@ -516,21 +429,106 @@ Even a modest computation of two loops using four 2D arrays has more than 200 co
 \paragraph{Research Problems:}
 
 \begin{itemize}
-\item How do we formulate format selection for a loop chain in terms of constraints?
-\item How do we enable users to specify format choices declaratively, and how do we represent those choices as constraints?
-\item How do we define an objective function for such an ILP formulation?
+\item How do we expose layout transformation specification to the user ergonomically?
+\item How do we accurately and efficiently estimate the cost of making different layout changes?
+\item How do we minimize the runtime overhead of solving the ILP formulation?
 \end{itemize}
 
 \paragraph{Proposed Solution:}
 
-\todo{rehash the ICS22 submission solutions}
+I propose developing a declarative API for changing data layout between kernels, and an ILP model for making additional data layout choices.
+Listing~\ref{FormatDecisions3MM} shows how the 3MM benchmark would be implemented using my proposed API. 
+The new \verb.FormatDecisions. object is the central component of our system. 
+Its instantiation, using the \verb.format_decisions. function, takes a tuple of references to Views that are possible targets of format changes and the kernel objects that constitute the whole computation.
+Two methods are used to register desired formats: \verb.set_format_before. and \verb.set_format_after..
+Both take the View to be reformatted, the desired format, and the computation before or after which the desired format should be used.
+Once all format choices are registered, the complete computation with the desired format conversions is generated using the \verb.finalize. method.
+
+\begin{figure}
+\begin{lstlisting}[caption={The 3MM benchmark implemented using FormatDecisions.},
+    label={FormatDecisions3MM}]
+auto knl1 = make_kernel<KPOL>(segs1, [=](auto i0, auto i1, auto i2) {
+    E(i0, i1) += A(i0, i2) * B(i2, i1);
+});
+auto knl2 = make_kernel<KPOL>(segs2, [=](auto i0, auto i1, auto i2) {
+    F(i0, i1) += C(i0, i2) * D(i2, i1);
+});
+auto knl3 = make_kernel<KPOL>(segs3, [=](auto i0, auto i1, auto i2) {
+    G(i0, i1) += E(i0, i2) * F(i2, i1);
+});
+
+auto decisions = format_decisions(tie(B,D,F), knl1, knl2, knl3);
+
+decisions.set_format_before(B, {{1,0}}, knl1);
+decisions.set_format_before(D, {{1,0}}, knl2);
+
+decisions.set_format_before(F, {{0,1}}, knl1);
+decisions.set_format_after(F, {{1,0}}, knl2);
+
+auto computation = decisions.finalize();
+computation();
+\end{lstlisting}
+\end{figure}
+
+For the ILP model, I use binary decision variables representing whether or not a particular format is used at different points in the chain. 
+For example, there are eight decision variables for the \verb.B. View in Listing~\ref{FormatDecisions3MM}, one for each of the two possible formats at each of the four points in the chain. 
+While there are only three kernels in the chain, there is an additional point added for the \enquote{output} format that the View has after the computation is done.
+
+Symbolically, we represent the variables as follows.
+To start, let $F$, $K$, and $T$ represent the set of all formats, kernels, and conversion times.
+Because we add additional elements to $K$ for the input and output formats, we know that $|K|$ is the number of user kernels plus 2.
+Furthermore, because there is one more conversion than kernel, we know that $|T| = |K| + 1$.
+For each kernel, we have one variable for each format. 
+Thus, let $fmt_{f,k}$ denote the variable for using the format $f$ during kernel $k$, where $f \in F$ and $k \in K$.
+For conversion variables, we have one variable for each possible conversion at each time point. 
+Thus, let $conv_{i,o,t}$ denote the decision variable for converting from format $i$ to to format $o$ at conversion time $t$, where $i,o \in F$ and $t \in T$.
+
+Four types of constraints are imposed on the decision variables.
+\begin{itemize}
+\item Format Uniqueness: At each time point, the View has exactly one selected format. Given by: 
+\begin{align*}
+	\bigwedge\limits_{k \in K} (1 = \sum\limits_{f \in F} fmt_{f,k})
+\end{align*}
+\item Conversion Uniqueness: At each conversion point, the View goes through exactly one conversion. Given by:
+\begin{align*}
+	\bigwedge\limits_{t \in T} (1 = \sum\limits_{i \in F}\sum\limits_{o \in F} conv_{i,o,t})
+\end{align*}
+\item Format-Conversion Matching, Input: At each conversion point, the input format for the conversion matches the format of the preceding kernel. Given by:
+\begin{align*}
+	\bigwedge\limits_{t \in T} \bigwedge\limits_{i \in F} fmt_{i,t.prev} = \sum\limits_{o \in F} conv_{i,o,t}
+\end{align*}
+\item Format-Conversion Matching, Output: At each conversion point, the output format for the conversion matches the format of the following kernel. Given by:
+\begin{align*}
+	\bigwedge\limits_{t \in T} \bigwedge\limits_{o \in F} fmt_{o,t.next} = \sum\limits_{i \in F} conv_{i,o,t}
+\end{align*}
+\item User Prescription: All user-provided format choices are met. With all user choices $U$ represented as pairs of a kernel and the format the user wants for that kernel, given by:
+\begin{align*}
+	\bigwedge\limits_{(k,f) \in U}  fmt_{f,k} = 1
+\end{align*}
+\end{itemize}
+
 
 \paragraph{Evalution:}
 
 I will perform a similar evaluation to the loop schedule optimization proposal, looking at source lines of code added, removed, or modified; and changes in execution time among the different variants.
 
-\paragraph{Preliminary Results}
 
+\paragraph{Preliminary Results:}
+
+Preliminary evaluation shows that my approach provides comparable performance improvement to hand-implemented data layout transformations. 
+This evaluation was performed on 4 benchmarks from the Polybench suite. 
+
+\paragraph{Summary of Reviewer Critiques:}
+
+This work was submitted for peer review at the International Conference on Supercomputing 2022 (ICS2022). 
+While praised for its clear writing and \enquote{elegant} approach to reducing programmer intervention, it was ultimitely rejected.
+The key elements the reviewers found lacking were:
+\begin{itemize}
+\item Minimal evaluation (4 benchmarks, only 2 show improvement, and no full applications)
+\item Limited to loops with perfect loop nests
+\item Limited discussion of related work
+\end{itemize}
+I will expand evaluation to include more benchmarks and at least one full application, expand on the related work (which I discussed in the introduction rather than its own section), and expand support to imperfectly nested loops.
 
 \subsection{Proposed Research: Sparse Data Formats in RAJA}
 
@@ -574,7 +572,7 @@ This means that proper format and schedule choice can reduce the algorithmic com
 \begin{itemize}
     \item How do we extend the decoupling of data, operation, iteration space, and schedule description into the sparse context while maintaining idiomatically RAJA-like code? \todo{good to get feedback from bronis, dave, laura}
     \item How do we formulate format and schedule selection for sparse codes as an ILP problem?
-    \item How do we estimate the cost of choosing different sparse formats and schedules?
+    \item How do we efficiently estimate the cost of choosing different sparse formats and schedules?
     \item How do we support efficient iteration through sparse data without the ability to rewrite the operation for a particular format? 
 \end{itemize}
 
@@ -884,73 +882,86 @@ This problem is tied with how the accesses are made efficiently.
 
 \section{Limitations}
 
+
+
+
 \section{Project Schedule}
-This section details the major milestones, deliverables, paper topics, and timeline for the completion of my dissertation. Note that the work from Sections \ref{Sec:Work1} and \ref{Sec:Work2} have already been submitted for publication.
+I set out the following schedule for my dissertation research.
 
-\subsection{Tasks and Deliverables}
+\subsection{Data Layout Transformation Paper Resubmission}
 
-I break this project into a number of task-deliverable pairs.
-While their presentation is strictly ordered, the true ordering is only partial. Progress on the tasks is co-iterative.
+\paragraph{Task:} I will improve my ICS2022 paper for resubmission at either LCPC (likely July/August) or OOPSLA (likely October). 
+The improvements I will make are a better discussion of related work, evaluation on a complete application rather than only benchmarks, evaluation on multiple machines, and reduction of the modeling overhead.
+This submission will answer my research questions about exposing layout transformation specification, accurate and efficient estimation of layout change cost, and overhead minimization for solving the ILP formulation.
 
-\paragraph{Evaluation Kernel Collection}
-The first task is the curation of example computations for the evaluation of my approach. 
-These kernels (which may be composed of multiple loop nests) will exhibit a variety of access patterns, dependence patterns, and scheduling choices. 
-Along with the computations will be data representative of the applications from which the computations are derived. 
-While some kernels may be derived from common linear algebraic operations, such as SpMV, these will be paired with data derived from applications that use the operation.
+\paragraph{Deliverable, Summer/Fall 2022:} Revised and submitted paper.
+
+
+\subsection{Evaluation Kernel Collection}
+
+\paragraph{Task:} I will curate example computations for the evaluation of my contribution.
+These computations will exhibit a variety of access patterns, dependence patterns, and data sparsity.
+Each computation will be paired with input data representative of their source application. 
 I aim to curate 100\% of the computations from codes related to fighting the climate crisis.
 
-The deliverable associated  with this task is an open-source\footnote{See Section~\ref{Sec:DataPlan} for details} repository with the example computations implemented in RAJA in a format-\textit{dependent} way. 
-The repository will provide a containerized instance that can be run using Docker.
-This repository will constitute the baseline against which my system will be compared.
+\paragraph{Deliverable, October 2022:} Open-source repository of computations implemented in RAJA in a format-\textit{dependent} way. Repository will containerize the configuring, buliding, and running of the computations. 
 
-\paragraph{Sparse Data Formats}
-The second task is the implementation of sparse data formats within RAJA.
-To keep the scale of the project manageable in the time available, I restrict this step to a proof of concept for N-dimensional compressed sparse fiber (CSF) and Dense formats.  
-While this implementation will not include performance modeling or automatic format conversion, it will form the basis upon which the modeling is built.
-In addition to the implementation of the data formats themselves, this task also includes the implementation of the different access logic for efficient/inefficient traversal orders, as well as the preparation of Views for traversal.
+\subsection{Sparse Data Formats and Computation Specification}
+\paragraph{Task:} 
+I will design and implement sparse data format support within RAJA. 
+I restrict the space of formats to N-dimensional compressed sparse fiber, dense, and coordinate storage formats.
+The system will support format-agnostic computation specification.
+I will implement the Evaluation Kernel Collection using the sparse data format support.
+This task will answer my research question about extending RAJA's decoupling into a sparse context while maintaining idiomatically RAJA-like code (R3.1).
+It will also answer my research question about supporting efficient iteration through sparse data without code generation (R3.4). 
 
-The deliverable associated with this task is another open-source repository, this time containing implementations of the example computations in a format-\textit{independent} way.
-It is likely that this deliverable will be the same repository as the previous task.
-\paragraph{Model-Driven Format Conversion}
-The third task is the implementation of model-driven format conversion within RAJA. 
-As with the dense variant in Section~\ref{Sec:Work2}, this task will involve the normalization of each View's traversal order, development of the ILP constraints, dynamic cost estimation for using different formats, and development of the ILP objective function based on the cost estimations.
+\paragraph{Deliverable, January 2023:} 
+Tests, examples, and implementation of sparse data format support within RAJA. 
+Open-source repository of computations implemented in RAJA in a format-\textit{independent} way.
+Repository will containerize the configuring, buliding, and running of the computations. 
 
-The deliverable associated with this task is a similar repository to the previous deliverables.
-These implementations of the example computations will use the model-driven system to specify format changes.
-Additionally, this deliverable will include an evaluation of the model accuracy, locating the model's choices in the space of all possible choices.
+\subsection{Model-Driven Format Conversion}
 
-\paragraph{Written Dissertation}
-The final task is the writing of the complete dissertation on the work I have undertaken during my PhD studies.
-This task will also include writing and submitting a third paper to a peer-reviewed venue.
-The deliverable for this task is a third peer-reviewed publication and my complete, defended dissertation. 
-\subsection{Timeline}
+\paragraph{Task:}
+I will model the sparse format selection problem as an ILP problem.
+I will then design and implement support for automatic selection of sparse format within RAJA.
+This system will generate and solve the formulated ILP problem to select format transformations.
+I will implement the Evaluation Kernel Collection using the model-driven system.
+This task will answer my research questions about formulating format selection as an ILP problem (R3.2) and efficiently estimating the cost of different format choices (R3.3).
 
-\paragraph{Summer 2022:} 
-I will be doing an internship at HPE working on the Chapel programming language~\cite{diaconescu2007approach} from May to August of 2022.
-During this time, I will be focusing on two main tasks.
-First, I will be working with climate scientists to explore how their codes may be ported from their current implementations into Chapel. 
-While porting their code, I will be making special effort to extract example kernels from their codes that may be implemented in RAJA.
-Second, I will be looking at how to incorporate the ideas from \ref{Sec:Work1} and \ref{Sec:Work2} into Chapel. 
-Those approaches were designed to be applicable in a number of languages and this will be put to the test this summer.
+\paragraph{Deliverable, March 2023:}
+Description of ILP formulation of sparse format selection problem.
+Tests, examples, and implementation of system to generate, solve, and apply the ILP formulation.
+Open-source repository of computations implement in RAJA using the model-driven system.
+Repository will containerize the configuring, buliding, and running of the computations. 
 
-During this time, I will also be working on implementing the sparse data formats within RAJA. While I aim to complete this task during the Summer, it may continue into the Fall.
+\subsection{Paper on Sparse Formats in RAJA}
 
-Furthermore, in service of not entering Spring 2023 with no writing done, I will be participating in a daily writing activity.
-Each work day, I will spend at minimum 15 minutes writing about the work I am doing.
-From May through August, this amounts to 1,275 minutes of writing.
-This will also assist in preparing me for a third submission to a peer-reviewed venue.
-\paragraph{Fall 2022:} 
-During the Fall of 2022, I will complete any remaining work on implementing the sparse data formats.
-Additionally, I will implement the model-driven format conversion system.
-I will continue the daily writing activity, with the expectation that the time spent writing will increase as the semester continues, as submissions for peer-reviewed venues are due in the last months of the fall and the first months of the new year. 
+\paragraph{Task:}
+I will write a paper for conference submission on previous three subsections. 
+This submission will include evaluation of the curated computations on multiple systems.
+Potential venues include PACT2023, SC2023, ICS2024,  OOPSLA2024, PPoPP2024, POPL2024, and PLDI2024.
 
-\paragraph{Spring 2023:}
-The final semester of my studies will be spent focusing on evaluating my contributions, submitting a paper to ICS2023, and writing the final dissertation. 
-The submission deadline for ICS is normally the end of January or the beginning of February, so the first month of the Spring 2023 semester will be focused on preparing that submission and the later months on writing my dissertation.
+
+\paragraph{Deliverable:} Submitted paper, date dependent on selected venue.
+
+
+\subsection{Overlapping Professional Activities}
+\begin{itemize}
+\item Internship with HPE Chapel Group, \textbf{May - August 2022} 
+\item Publications Chair, International Workshop on OpenMP 2022, \textbf{May - September 2022}
+\item Graduate and Professional Student Council Representative, \textbf{May 2021 - May 2023}
+\item Cultural Competency in Computing Fellowship, Cohort 2, \textbf{February 2022 - May 2023}
+\end{itemize}
 
 \section{Data Plan}
 \label{Sec:DataPlan}
-All code related to my dissertation will be open source under the Atmosphere Software License, which imposes enforcable divestment obligations on the relicensing of software~\cite{atmospherelicense}. 
+All code related to my dissertation will be open source under the Atmosphere Software License~\cite{atmospherelicense}. 
+These open-source compliant licenses share many clauses with the GNU license. 
+Like the GNU license, the Atmosphere licenses place restrictions on the redistribution of software that uses the licensed component.
+The key addition is that the Atmosphere licenses require divestment from fossil fuels, with other optional restrictions based on the version used. 
+
+The important result of using an Atmosphere license for my dissertation work product is that the resulting code cannot be incorporated into products by entities that contribute to the climate crisis.
 \section{Conclusion}
 
 
