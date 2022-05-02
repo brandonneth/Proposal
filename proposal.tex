@@ -506,7 +506,24 @@ The LayoutChange column shows the execution time of code that changes the layout
 Finally, the SwitchAndRun column shows the combined execution time of changing the layout from bad to good and then running.
 As the graph shows, performance improves  significantly (72\%) simply by changing the data layout, and the cost of performing the layout change is small (<1\% of execution time). 
 
+General purpose libraries like Kokkos and RAJA and programming languages like Chapel~\cite{diaconescu2007approach} give programmers some control over the data layout of multi-dimensional arrays. However, this support is limited to the point of initialization.
+Thus, programmers must use that particular data format for the entire computation.
+While a developer could change the data layout mid-computation in RAJA, the developer must either modify RAJA library code or use multiple arrays for the same data. 
+Both options increase the code complexity and increase its fragility.
+The brave developer who chooses one of these options must still overcome yet another obstacle: selecting the right combination of formats.
+Even a modest computation of two loops that use four 2D arrays has more than 200 combinations from which to choose, so trying all possible options quickly becomes infeasible. 
 
+A significant body of work has developed Integer Linear Programming (ILP) formulations to determine data layouts in distributed memory settings for programming languages like HPF and D~\cite{bixby1994automatic,kennedy1995automatic,kennedy1998automatic}. 
+A similar line of work~\cite{chen2004ilp,chen2005constraint,chen2005integrating, ozturk2011data} uses ILP-based constraint networks to combine data layout and schedule optimizations. 
+Both approaches were developed in the context of a compiler. 
+We build on an important idea from them: use a performance model encoded as the objective function in an ILP problem to automate data layout decisions (partially or fully).
+Rather than only applying this data layout compiler technology automatically, we provide it to the user through a library interface while still enabling its automated use.
+Our library and runtime approach allows the user to guide use of the technology to focus on loops most likely to benefit from it.
+However, the library must perform its analysis and decision making at runtime and the interface must be high-level while still providing enough control. 
+These challenges lead to a number of sub-problems such as interface design so that the analysis cost is low (enough) while maintaining ease of use.
+A compiler approach can take longer and has all information that the language semantics provide.
+Some advantages of a library approach are that it is more accessible to users and the library implementation will have more information available, such as loop bounds, accessible at runtime before a loop executes.
+Although useful advantages, these lead to further sub-problems about how the library implementation can most leverage the compiler of the language in which it is embedded (C++ here) to force as much specialization as possible to achieve the ultimate goal of performance.
 \begin{figure}
 	\includegraphics[width=\columnwidth]{IntroExampleGraph.pdf}
 	\caption{Execution time for matrix multiplication using optimal and non-optimal data layouts and execution time for converting from non-optimal to optimal.}
@@ -514,39 +531,14 @@ As the graph shows, performance improves  significantly (72\%) simply by changin
 	%\Description[Matrix Multiplication Execution Time for Different Layouts]{A bar plot showing a "Bad Layout" column with execution time greater than the "Good Layout" and "Layout Conversion" columns combined.}
 \end{figure}
 
-\paragraph{Related Work}
 
-\todo{Copy new related work stuff here.}
-
-Although controlling data layout is quite important, the options programmers have to control data layouts in coordination with loop schedules have limitations.
-Compiler optimizations such as loop permutation have been developed to change loop schedules so that a loop traversal order better aligns with data layout.
-However, general purpose compilers 
-(1) have difficulties analyzing for the relationship between
-data layout and schedule due to challenges like aliasing~\cite{hind2001pointer} and lack of multidimensional arrays in 
-C/C++ languages; 
-(2) do not generally expose fine-grained data layout or loop optimization
-controls to users, leading to proposals to add pragma-based controls to OpenMP~\cite{kruse2019design} and Clang~\cite{kruse2018user}; and 
-(3) typically do not optimize across multiple loops well.
-
-The problem of inter-loop optimizations, especially those that balance parallelism and locality, has spawned many approaches. 
-Approaches are often built into the compiler, lacking a user-accessible interface.
-Some use loop schedule transformations alone~\cite{wolf1991data,mckinley1996improving}, while others consider data layout transformations as well~\cite{cierniak1995unifying,kennedy1995automatic,kandemir1998improving,  chen2005constraint, chen2005integrating, ozturk2011data}.
-Other approaches develop or expand domain specific languages to expose controls to the user.
-Many such approaches target stencil codes~\cite{henretty2011data,kronawitter2018automatic,luporini2018design} and image processing~\cite{ragan-kelley2013halide,mullapudi2015polymage}.
-
-General purpose libraries like Kokkos and RAJA and programming languages like Chapel~\cite{diaconescu2007approach} give programmers some control over the data layout of multi-dimensional arrays. However, this support is limited to the point of initialization.
-Thus, programmers must use that particular data format for the entire computation.
-While a developer could change the data layout mid-computation in RAJA, the developer must either modify RAJA library code or use multiple arrays for the same data. 
-Both options increase the code complexity and increase its fragility.
-Even for the brave developer choosing one of these options, yet another obstacle remains: selecting the right combination of formats for the computation.
-Even a modest computation of two loops using four 2D arrays has more than 200 combinations from which to choose, meaning trying out all possible options quickly becomes infeasible. 
 
 \paragraph{Research Problems:}
 
 \begin{itemize}
-\item How do we expose layout transformation specification to the user ergonomically?
-\item How do we accurately and efficiently estimate the cost of making different layout changes?
-\item How do we minimize the runtime overhead of solving the ILP formulation?
+\item R2.1 How do we expose layout transformation specification to the user ergonomically?
+\item R2.2 How do we accurately and efficiently estimate the cost of making different layout changes?
+\item R2.3 How do we minimize the runtime overhead of solving the ILP formulation?
 \end{itemize}
 
 \paragraph{Proposed Solution:}
@@ -630,8 +622,8 @@ I will perform a similar evaluation to the loop schedule optimization proposal, 
 
 \paragraph{Preliminary Results:}
 
-Preliminary evaluation shows that my approach provides comparable performance improvement to hand-implemented data layout transformations. 
-This evaluation was performed on 4 benchmarks from the Polybench suite. 
+Preliminary results indicate that while there is performance improvement available through layout transformations, modelling which layouts to choose introduces more overhead than performance improvement. 
+
 
 \paragraph{Summary of Reviewer Critiques:}
 
@@ -643,7 +635,45 @@ The key elements the reviewers found lacking were:
 \item Limited to loops with perfect loop nests
 \item Limited discussion of related work
 \end{itemize}
-I will expand evaluation to include more benchmarks and at least one full application, expand on the related work (which I discussed in the introduction rather than its own section), and expand support to imperfectly nested loops.
+I will expand evaluation to include more benchmarks and at least one full application, expand on the related work to place my work in context (current progress immediately following), and expand support to imperfectly nested loops. I will also develop more techniques for reducing the modelling overhead.
+
+\paragraph{Related Work}
+Early approaches to optimizing data locality use schedule transformations rather than data layout transformations. 
+Work incorporated into the SUIF compiler uses interchange, reversal, skewing, and tiling~\cite{wolf1991data}, whereas Fortran source-to-source approaches also use loop fusion~\cite{mckinley1996improving}.
+While schedule transformations avoid the overhead cost of layout conversion, their global nature can improve locality for one access while harming another.
+Nevertheless, schedule transformations remain a popular approach to optimizing data locality and parallelism, 
+especially through tiling techniques~\cite{bondhugula2008pluto,bertolacci2015parameterized,bondhugula2016diamond,bandishti2012tiling,unat2016tida}.
+
+In the domain of data layout transformations, early work in High Performance Fortran (HPF) and D compilers~\cite{bixby1994automatic,kennedy1995automatic,kennedy1998automatic} provide foundations for a variety of later approaches.
+Their framework follows a popular pattern: generate a space of possible choices, estimate the performance of different choices, and select an option using an ILP formulation. 
+My ILP problem formulation is similar to theirs, although we do not use the data layout graph intermediate representation.
+Furthermore, where their model for cost estimation focuses on communication costs in a distributed context, my approach models on-node performance costs of cache misses.
+
+The polyhedral model, traditionally used for schedule transformations, is commonly leveraged for data layout transformations as well.
+With the rise of multicore chips, new strategies were needed to manage shared on-chip resources. 
+Work by Lu et al.~\cite{lu2009data} and Zhang et al.~\cite{zhang2011optimizing} develop layout optimization schemes based on the polyhedral model and use a combination of strip-mining, permutation, and padding transformations.
+
+
+Data layout transformation frameworks are also popular for heterogeneous programming systems, especially for stencil codes.
+Sung, Stratton, and Hwu~\cite{sung2010data} use data layout transformations to relieve pressure on memory controllers in structured grid applications by spreading data out across the address space based on the indexing behavior of the application.
+Henretty et al.~\cite{henretty2011data} develop a layout transformation and accompanying static analysis to address stream alignment conflicts for SIMD architectures.
+Jaeger and Barthou~\cite{jaeger2012automatic} present a strategy for generating stencil codes with optimal data layouts using a multi-padding layout transformation.
+Recognizing the need for specialized support for ever-changing chip structure, Majeti et al.~\cite{majeti2013compiler} develop a programmer (or autotuner) guided data transformation system.
+Built into the Habenero-C compiler, the meta-data provided by the user guides the generation of architecture-specific SOA, AOS, and SOAOS data layouts.
+Another approach by Kofler, Cosenza, and Fahringer~\cite{kofler2015automatic} convert AOS implementations to other data layouts for GPU applications automatically.  
+With the exception of Majeti et al., these approaches do not provide an interface to the developer, and without exception are compiler-based approaches.
+My approach presents an interface to the developer in the form of a library API, allowing user control and low-cost integration into existing workloads.
+
+Although still in the realm of the compiler-based tecniques, pragmas have been suggested as a solution to the problem of providing control over the transformations to the user.
+Proposals to add such pragmas have been submitted to OpenMP~\cite{kruse2019design} and Clang~\cite{kruse2018user}.
+Other work has implemented transformation pragmas into a source-to-source compiler~\cite{xu2014semi}. 
+
+
+Domain-specific language approaches are another avenue for presenting users with control of the data layout transformations to apply. 
+Kronawitter et al.~\cite{kronawitter2018automatic} incorporate data layout specifications into the ExaSlang DSL.
+Using a polyhedral framework, the Tiramisu DSL~\cite{baghdadi2019tiramisu} also enables data layout transformation specifications.
+In constrast to these specialized approaches, my approach seeks to support a wider class of computations without needing the additional machinery required to use DSLs. 
+
 
 \subsection{Proposed Research: Sparse Data Formats in RAJA}
 
