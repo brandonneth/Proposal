@@ -1028,7 +1028,17 @@ My Approach & & &
 
 \section{Limitations}
 
+One self-imposed limitation of my proposal is the space of sparse formats I will support.
+Because I focus on CSF, Coordinate, and Dense formats, codes that use formats outside of this space will not be able to use my framework.
+More broadly, the impact of this work is partially limited by the host library RAJA. 
+However, a similar approach could be used in other libraries like Kokkos, or libraries for different languages all together.
 
+Another limitation of my work is that it does not support doing data and schedule transformations at the same. 
+There is ample evidence that co-optimizing schedule and layout provides more performance improvement than either on their own \todo{cite Vivek's paper on this}. 
+Similarly, support for more transformations, like wavefront parallelism scheduling and AoS-SoA conversions would expand the class of applications that my contribution could be used for.
+
+Finally, because of the heavy templating involved in my approach, error messages can be difficult to decipher. 
+This is a familiar problem \todo{cite the papers from the EDSL class}, but its solution is out of the scope of this work.
 
 
 \section{Project Schedule}
