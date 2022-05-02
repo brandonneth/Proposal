@@ -710,7 +710,6 @@ No matter the system used to represent the computation, the importance of good l
 While memory hierarchy means there are some benefits to be found in dense codes, dense arrays are constant time accessible ($O(1)$), so performance benefits come from a reduction of that nebulous constant $M$.
 For CSR data, a poorly scheduled traversal can require a search for each access.
 This means that proper format and schedule choice can reduce the algorithmic complexity of the computation.
-\todo{reference to last subsection}
 
 
 \paragraph{Research Problems:}
@@ -811,10 +810,6 @@ If the computation is traversing the View's data in one of the specified efficie
 Otherwise, the access function will perform the default behavior for the format, likely involving searching the index structure of the View.
 Listing~\ref{BackendSketch} sketches some of these components for the CSR format. 
 
-
-\todo{full example from code to model to choice}
-\todo{how to describe sparse dependence / parallelism in sparse triangular solve within the policy}
-
 \begin{figure}
 \begin{lstlisting}[caption={Sketch of the backend for efficient iteration}, label={BackendSketch}]
 View::prepare_for_traversal(Schedule schedule, SymAcess accessInfo) {
@@ -901,10 +896,14 @@ chain();
 \end{lstlisting}
 \end{figure}
 
-
-
-
-
+Finally, I turn to the problem of formulating format selection as an ILP problem and cost estimation.
+My planned approach is somewhat similar to that presented in Section~\ref{Sec:Work2} for use with dense codes.
+However, there are some important differences. 
+First is the potential to reduce the algorithmic complexity of the computation. 
+This suggests that dynamic cost estimation via small benchmarks may not be best for capturing the potential costs.
+Ahrens, Kjolstad, and Amarasinghe~\cite{ahrens2021asymptotic} present a related approach to selecting schedules for sparse programs, and their cost modelling approach may be useful in selecting formats.
+The other major difference is the influence of the data's sparsity on the performance results. 
+This will have to be incorporated into the model to accurately estimate the benefit of format changes.
 
 
 
@@ -966,64 +965,66 @@ My Approach & & &
 \caption{Table of capabilities for different approaches}
 \label{MagicTable}
 \end{table}
-\subsection{Complete Example}
-
-Start with the SpMM implementation from Listing~\ref{SparseMMRaja}.
-This subsection will walk through my proposed approach step by step.
-First, I will show how the model selects a data format. 
-Then, I will show how the selected data format is applied to each View.
-
-Before we start, I restrict the problem to N-dimensional compressed sparse fiber, with arbitray dimension ordering. 
-In this restricted problem, compressed sparse row (CSR) is \verb.Format::CSF(0,1). and compressed sparse column (CSC) is  \verb.Format::CSF(1,0).
-
-\paragraph{Format Model:}
-This example's model has four values to identify:
-\begin{itemize}
-    \item Data format for A
-    \item Data format for B
-    \item Data format for C
-    \item Execution nesting order
-\end{itemize}
-Generally, for each kernel in a chain, we model variables for each View's data format and the execution nesting order for that loop nest.
 
 
-For the execution nesting order, the model will not be able to use different execution nesting orders, because the order is provided as a template argument. 
-However, the system will be able to alert the programmer that there is a potentially better order choice.
+% \subsection{Complete Example}
 
-Let's enumerate every variable in the model and what it's name indicates. 
-\begin{itemize}
-    \item \verb.A_fmt_0_1. True if A's format is ordering $(0,1)$, false otherwise
-    \item \verb.A_fmt_1_0. True if A's format is ordering $(1,0)$, fales otherwise
-    \item \verb.B_fmt_0_1. True if B's format is ordering $(0,1)$, false otherwise
-    \item \verb.B_fmt_1_0. True if B's format is ordering $(1,0)$, fales otherwise
-    \item \verb.C_fmt_0_1. True if C's format is ordering $(0,1)$, false otherwise
-    \item \verb.C_fmt_1_0. True if C's format is ordering $(1,0)$, fales otherwise
-    \item \verb.nest_0_1_2. True if the nesting order is $(0,1,2)$, false otherwise
-    \item \verb.nest_0_2_1. True if the nesting order is $(0,2,1)$, false otherwise
-    \item \verb.nest_1_0_2. True if the nesting order is $(1,0,2)$, false otherwise
-    \item \verb.nest_1_2_0. True if the nesting order is $(1,2,0)$, false otherwise
-    \item \verb.nest_2_0_1. True if the nesting order is $(2,0,1)$, false otherwise
-    \item \verb.nest_2_1_0. True if the nesting order is $(2,1,0)$, false otherwise
-\end{itemize}
+% Start with the SpMM implementation from Listing~\ref{SparseMMRaja}.
+% This subsection will walk through my proposed approach step by step.
+% First, I will show how the model selects a data format. 
+% Then, I will show how the selected data format is applied to each View.
 
-Now let's consider the constraints on these variables. 
-First, we have constraints so that there is only one format per View per computation. For A, this constraint looks like \verb.A_fmt_0_1 + A_fmt_1_0 = 1..
-A similar approach generates constraints for nesting variables
-\todo{format translation variables}
+% Before we start, I restrict the problem to N-dimensional compressed sparse fiber, with arbitray dimension ordering. 
+% In this restricted problem, compressed sparse row (CSR) is \verb.Format::CSF(0,1). and compressed sparse column (CSC) is  \verb.Format::CSF(1,0).
 
-Finally, I need to describe the terms in the objective function.
-I need to take into account the interaction between the variables in the model.
-I assume there is only interaction between data format variables and nesting order variables. 
-This means that for each combination of format variable and schedule variable, I run a dynamic microbenchmark accessing data with the format using the particular schedule. 
-For the combo of \verb.A_fmt_0_1. and \verb.nest_0_1_2., let the execution time of the microbenchmark be \verb.ExecTime.
-Further, let \verb.A_size. be the size of A. 
-Then the term in the objective function will be \verb.(ExecTime * A_size) * A_fmt_0_1 * nest_0_1_2..
+% \paragraph{Format Model:}
+% This example's model has four values to identify:
+% \begin{itemize}
+%     \item Data format for A
+%     \item Data format for B
+%     \item Data format for C
+%     \item Execution nesting order
+% \end{itemize}
+% Generally, for each kernel in a chain, we model variables for each View's data format and the execution nesting order for that loop nest.
 
-There will also need to be objective function terms for the cost of translating from one format to another. 
 
-\paragraph{Applying the Format}
-Once a format is selected, I need to propogate that format into the Views. 
-This problem is tied with how the accesses are made efficiently. 
+% For the execution nesting order, the model will not be able to use different execution nesting orders, because the order is provided as a template argument. 
+% However, the system will be able to alert the programmer that there is a potentially better order choice.
+
+% Let's enumerate every variable in the model and what it's name indicates. 
+% \begin{itemize}
+%     \item \verb.A_fmt_0_1. True if A's format is ordering $(0,1)$, false otherwise
+%     \item \verb.A_fmt_1_0. True if A's format is ordering $(1,0)$, fales otherwise
+%     \item \verb.B_fmt_0_1. True if B's format is ordering $(0,1)$, false otherwise
+%     \item \verb.B_fmt_1_0. True if B's format is ordering $(1,0)$, fales otherwise
+%     \item \verb.C_fmt_0_1. True if C's format is ordering $(0,1)$, false otherwise
+%     \item \verb.C_fmt_1_0. True if C's format is ordering $(1,0)$, fales otherwise
+%     \item \verb.nest_0_1_2. True if the nesting order is $(0,1,2)$, false otherwise
+%     \item \verb.nest_0_2_1. True if the nesting order is $(0,2,1)$, false otherwise
+%     \item \verb.nest_1_0_2. True if the nesting order is $(1,0,2)$, false otherwise
+%     \item \verb.nest_1_2_0. True if the nesting order is $(1,2,0)$, false otherwise
+%     \item \verb.nest_2_0_1. True if the nesting order is $(2,0,1)$, false otherwise
+%     \item \verb.nest_2_1_0. True if the nesting order is $(2,1,0)$, false otherwise
+% \end{itemize}
+
+% Now let's consider the constraints on these variables. 
+% First, we have constraints so that there is only one format per View per computation. For A, this constraint looks like \verb.A_fmt_0_1 + A_fmt_1_0 = 1..
+% A similar approach generates constraints for nesting variables
+% \todo{format translation variables}
+
+% Finally, I need to describe the terms in the objective function.
+% I need to take into account the interaction between the variables in the model.
+% I assume there is only interaction between data format variables and nesting order variables. 
+% This means that for each combination of format variable and schedule variable, I run a dynamic microbenchmark accessing data with the format using the particular schedule. 
+% For the combo of \verb.A_fmt_0_1. and \verb.nest_0_1_2., let the execution time of the microbenchmark be \verb.ExecTime.
+% Further, let \verb.A_size. be the size of A. 
+% Then the term in the objective function will be \verb.(ExecTime * A_size) * A_fmt_0_1 * nest_0_1_2..
+
+% There will also need to be objective function terms for the cost of translating from one format to another. 
+
+% \paragraph{Applying the Format}
+% Once a format is selected, I need to propogate that format into the Views. 
+% This problem is tied with how the accesses are made efficiently. 
 
 \section{Limitations}
 
