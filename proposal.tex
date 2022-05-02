@@ -67,47 +67,58 @@ I propose the introduction of constructs to enable portable specification of cro
 My key research question is: how do we enable program analyses and transformations in the context of a library rather than a compiler?
 I will answer this question with three contributions.
 My first contribution is a framework for supporting cross-kernel schedule transformation techniques in the library, specifically RAJA, rather than in the compiler. 
+This component has been completed as was publish in ICS2021.
 My second contribution builds on this approach to allow developers to make data layout transformations, chosen by themselves or by a performance model.
-My final contribution extends the schedule and layout transformation frameworks to support sparse codes.
+This component is in progress and scheduled to be submitted for publication this Fall.
+My final contribution extends the layout transformation frameworks to support sparse codes.
+I plan to complete this component over the next 18 months, split into collecting evaluation kernels, developing supporting the description of sparse computations, and developing a system to intelligently select format conversions.
 \end{abstract}
 
 
 
 \section{Introduction}
 
+Computer simulation plays a foundational role in modern science and engineering. 
+Considering the cost of a utility scale wind farm (upwards of 1 billion dollars), there is significant interest in making sure the farm will behave as expected.
+Computer simulation can help provide this certainty.
 
+There are three competing concerns that need balancing when considering the development process.
+First is developer productivity.
+Code is expensive to write, especially when the authors are not programmers by trade.
+High-productivity languages like Python excel in the realm of developer productivity.
+While the actual execution of the code is slow, the ease of writing, maintaining, and updating the code can make up for the slow performance.
+However, this is context-dependent. 
+In many situations, such as HPC, the code also needs to run quickly.
 
+The second competing concern is exactly this: application performance.
+There are often real-world constraints on how long code execution can take.
+Consider the automatic breaking system in many modern vehicles.
+These systems do not have the luxury of running slowly, else they risk the safety of their passengers.
+On the other end, large simulation codes need to make the most out of the limited time they are allotted on HPC systems.
+Writing fast code runs at odds with programmer productivity in part because achieving good application performance normally requires the use of languages like C++ and Fortran, languages rarely lauded for their high developer productivity.
 
+The final competing concern, cross-system portability, runs in tension with both application performance and programmer productivity.
+Computing hardware is diversifying, meaning code optimized for one system may perform poorly on another.
+Finding one set of optimizations that give good performance across different systems is not straightforward, and not even always possible.
+The alternative is to maintain multiple versions of the same code base, each specially optimized for the system it is designed for.
 
+RAJA, a performance portability library for C++, aims to ease these tension with a powerful technique: separation of concerns.
+When writing RAJA code, each component of the computation is specified independently of the others.
+This means that changing the layout of data in memory or the execution schedule only requires changes to those components, rather than the entire computation.
+In the same vein, a single source code can support multiple systems by specializing just the parts of the computation that need to be different for each system.
 
-\section{Research Plan}
-This section details the research plan for the work proposed in the next three subsections. 
-The first describes an interface for specifying schedule transformations across multiple kernels in RAJA, such as loop fusion and overlapped tiling. 
-It also presents background on RAJA itself and some other underlying contributions utilized throughout this proposal.
-The second describes a related interface for specifying data transformations between kernels in a declarative fashion. 
-The third describes an approach to incorporating support for sparse data formats into the two previous interfaces. 
+By providing separation of concerns through a library interface, RAJA has a lower barrier to entry than other solutions, which often require specialized compilation pipelines. 
+Because RAJA is a library, developers of C++ applications can introduce a separation of concerns while using robust, production compilers like GCC and Clang.
+However, because RAJA code uses standard C++ compilers, it misses out on the powerful compiler-based optimizations of specialized programming languages.
 
-\paragraph{Overarching Research Question:} How do we enable program analyses and transformations in the context of a library rather than a compiler?
+My dissertation will work towards remedying this trade off by incorporating compiler optimization techniques into the library itself and exposing their control to the developer. 
+My first contribution targets loop schedule transformations, my second data layout transformations, and my third sparse data formats.
+I evaluate each contribution by comparing its performance improvement to hand-implementing the same transformations.
+I also compare the source lines of code modified or added for each implementation.
 
-\subsection{Completed Research: Inter-loop Schedule Transformations in RAJA}
-\label{Sec:Work1}
-When parallelizing an application, loops are generally considered and
-parallelized one at a time.
-This reduces opportunities to leverage inter-loop data reuse.
-The loop chain abstraction~\cite{krieger2013loop} captures sequences of loops that share 
-data and enough information about how such loops access 
-data to enable inter-loop optimization.
-Considering loops as a chain uncovers optimizations, like fusion
-and overlapped tiling, that are impossible to replicate when optimizing
-each loop independently.
+Before moving to the research plan (Section 2), the limitations of my proposal (Section 3), my proposed schedule (Section 4), and my data plan (Section 5), I give a short introductory example of how code using the RAJA library is written.
 
-Implementing these transformations by hand involves significant modification to what can be the most important part of a computation, opening up new avenues for bugs. 
-Especially in the context of RAJA applications, where performance portability is paramount and such a transformation may only be beneficial on some systems, the increased fragility may not be worth the performance benefits. 
-Thus, I developed an interface for specifying inter-loop optimizations in RAJA that imposes a minimal code delta on the developer, incorporates safety checks, and requires no additional compilation steps. 
-
-\paragraph{Context and Background:}
-
-I begin with an example of how to use RAJA. I will be converting a standard C++ implementation of the \verb.HYDRO_2D. benchmark into RAJA. 
+I will be converting a standard C++ implementation of the \verb.HYDRO_2D. benchmark into RAJA. 
 \verb.HYDRO_2D. is a typical stencil kernel extracted from a hydrodynamics code. 
 Listing~\ref{HydroCpp} shows the C++ implementation we will convert.
 Listing~\ref{HydroRaja} shows the RAJA implementation.
@@ -205,6 +216,109 @@ This is because RAJA includes an optional array wrapper called the View, which i
 The use of Views rather than direct arrays is a key component to this proposal, as it is how I will gather access information to guide the transformation process.
 
 
+
+\section{Research Plan}
+This section details the research plan for the work proposed in the next three subsections. 
+The first describes an interface for specifying schedule transformations across multiple kernels in RAJA, such as loop fusion and overlapped tiling. 
+It also presents background on RAJA itself and some other underlying contributions utilized throughout this proposal.
+The second describes a related interface for specifying data transformations between kernels in a declarative fashion. 
+The third describes an approach to incorporating support for sparse data formats into the two previous interfaces. 
+
+\paragraph{Overarching Research Question:} How do we enable program analyses and transformations in the context of a library rather than a compiler?
+
+\subsection{Completed Research: Inter-loop Schedule Transformations in RAJA}
+\label{Sec:Work1}
+When parallelizing an application, loops are generally considered and
+parallelized one at a time.
+This reduces opportunities to leverage inter-loop data reuse.
+The loop chain abstraction~\cite{krieger2013loop} captures sequences of loops that share 
+data and enough information about how such loops access 
+data to enable inter-loop optimization.
+Considering loops as a chain uncovers optimizations, like fusion
+and overlapped tiling, that are impossible to replicate when optimizing
+each loop independently.
+
+Implementing these transformations by hand involves significant modification to what can be the most important part of a computation, opening up new avenues for bugs. 
+Especially in the context of RAJA applications, where performance portability is paramount and such a transformation may only be beneficial on some systems, the increased fragility may not be worth the performance benefits. 
+Thus, I developed an interface for specifying inter-loop optimizations in RAJA that imposes a minimal code delta on the developer, incorporates safety checks, and requires no additional compilation steps. 
+
+\paragraph{Context and Background:}
+
+Balancing data locality with parallelism is key to achieving optimal performance on HPC systems. 
+Striking a good balance involves looking at how data is accessed across multiple stages of a computation.
+Olschanowsky et al~\cite{olschanowsky2014study} found that the best performance is achieved using overlapped tiling schedules. 
+Overlapped tiling, shown graphically in Figure~\ref{tilingProcess}, improves data locality by grouping together iterations that use the same data.
+At the cost of recomputing some overlapping iterations, this transformation maintains its parallelism.
+Because of how laborious implementing overlapped tiling can be, an interface that performs this transformation on behalf of the programmer has significant benefits in terms of developer time. 
+
+\begin{figure*}
+	\centering
+
+	\begin{subfigure}[t]{0.45\columnwidth}
+		\centering
+		\includegraphics[height=0.5in]{TilingProcess/TilingProcess1.png}
+		\caption{Original kernel iteration spaces and (abbreviated) dependences.}
+		\label{tiling1}
+	\end{subfigure}
+	~~
+	\begin{subfigure}[t]{0.45\columnwidth}
+		\centering
+		\includegraphics[height=.5in]{TilingProcess/TilingProcess2.png}
+		\caption{After shifting kernels to remove negative dependences.}
+		\label{tiling2}
+	\end{subfigure}
+	\par\bigskip
+	\begin{subfigure}[t]{0.45\textwidth}
+		\centering
+		\includegraphics[height=0.5in]{TilingProcess/TilingProcess3.png}
+		\caption{Shared iteration space. Chain could be fused sequentially.}
+		\label{tiling3}
+	\end{subfigure}
+	~~
+	\begin{subfigure}[t]{0.45\textwidth}
+		\centering
+		\includegraphics[height=.5in]{TilingProcess/TilingProcess4.png}
+		\caption{Underlying tiles for TileSize=6 shaded in purple.}
+		\label{tiling4}
+	\end{subfigure}
+	\par\bigskip
+	\begin{subfigure}[t]{0.45\textwidth}
+		\centering
+		\includegraphics[height=0.5in]{TilingProcess/TilingProcess5.png}
+		\caption{Overlap for each tile shaded in orange. Tiles against low edge have no overlap.}
+	\end{subfigure}
+	~~
+	\begin{subfigure}[t]{0.45\textwidth}
+		\centering
+		\includegraphics[height=.5in]{TilingProcess/TilingProcess6.png}
+		\caption{An individual overlapped tile.}
+	\end{subfigure}
+	\par\bigskip
+	\begin{subfigure}[t]{0.45\textwidth}
+		\centering
+		\includegraphics[height=0.5in]{TilingProcess/TilingProcess7.pdf}
+		\caption{Execution order for an individual tile without fusion.}
+		\label{tileNofuse}
+	\end{subfigure}
+	~~
+	\begin{subfigure}[t]{0.45\textwidth}
+		\centering
+		\includegraphics[height=0.5in]{TilingProcess/TilingProcess8.pdf}
+		\caption{Execution order for an individual tile with fusion.}
+		\label{tileFuse}
+	\end{subfigure}
+	\par\bigskip
+	\begin{subfigure}[t]{\textwidth}
+		\centering
+		\includegraphics[height=0.5in]{TilingProcess/TilingProcess9.pdf}
+		\caption{Global execution order for entire computation.}
+		\label{tiling9}
+	\end{subfigure}
+
+\caption{Overlapped tiling of 3 one-dimensional loops.}
+\label{tilingProcess}
+\end{figure*}
+
 \paragraph{Research Problems:}
 The \verb.HYDRO_2D. benchmark shows significant data reuse across its three loops.
 A loop transformation like overlapped tiling can leverage this reuse to improve performance.
@@ -226,7 +340,7 @@ To address the need for a delay between the computation's description and execut
 These wrapper objects are created by a function, \verb.make_kernel., with the same interface as the standard \verb.kernel. call. 
 These kernel objects can be executed using the call operator.
 Such an interface minimizes the code changes required to use it.
-Listing~\ref{MakeKernelExample} shows how this function would be used for the \verb.HYDRO_2D. case.
+Listing~\ref{MakeKernelExample} shows how this function is used for the \verb.HYDRO_2D. case.
 
 \begin{figure}
     \begin{lstlisting}[caption={Example usage of the \texttt{make\_kernel} function.},label={MakeKernelExample}]
@@ -340,8 +454,9 @@ I look at the execution time for single-node executions, comparing the execution
 I also compare the difference in the source lines of code changed to implement each variant.
 
 \paragraph{Preliminary Results:}
-Preliminary results show similar performance results with drastically fewer code changes.
-\todo{add figures from \cite{neth2021inter}}
+Evaluation results indicate a similar performance improvement to hand-implementation with significantly fewer code changes.
+Figure~\ref{RAJAPerfPerf} shows the change in performance for benchmark kernels optimized by hand (blue) and with RAJALC (green). 
+Table~\ref{sloc} shows the source lines of code changed and added for the different implementations of the benchmark programs.
 
 \begin{figure}
 \includegraphics[width=0.5\textwidth]{RAJALC-perf-system-1.png}
@@ -570,10 +685,10 @@ This means that proper format and schedule choice can reduce the algorithmic com
 
 \paragraph{Research Problems:}
 \begin{itemize}
-    \item How do we extend the decoupling of data, operation, iteration space, and schedule description into the sparse context while maintaining idiomatically RAJA-like code? \todo{good to get feedback from bronis, dave, laura}
-    \item How do we formulate format and schedule selection for sparse codes as an ILP problem?
-    \item How do we efficiently estimate the cost of choosing different sparse formats and schedules?
-    \item How do we support efficient iteration through sparse data without the ability to rewrite the operation for a particular format? 
+    \item R3.1: How do we extend the decoupling of data, operation, iteration space, and schedule description into the sparse context while maintaining idiomatically RAJA-like code?
+    \item R3.2: How do we formulate format selection for sparse codes as an ILP problem?
+    \item R3.3: How do we efficiently estimate the cost of choosing different sparse formats?
+    \item R3.4: How do we support efficient iteration through sparse data without the ability to rewrite the operation for a particular format? 
 \end{itemize}
 
 
