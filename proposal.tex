@@ -12,7 +12,8 @@
 \usepackage{subcaption}
 \usepackage{algorithmicx}
 \usepackage{standalone}
-
+\usepackage[hidelinks]{hyperref}
+\usepackage{cleveref}
 \usepackage[left=1in,right=1in,top=1in,bottom=1in]{geometry}
 
 \lstset{ %
@@ -58,19 +59,22 @@ escapeinside={<@}{@>}
 \begin{abstract}
 From optimizing wind-farm performance~\cite{sprague2020exawind} to understanding the dynamics of the watershed~\cite{olschanowsky2019hydroframe,condon2013implementation}
 high-performance computing (HPC) is a critical strategy for combatting the climate crisis. 
-Contributors, not always programmers by trade, need to balance developer productivity, application performance, and cross-system portability.
+Contributors need to balance developer productivity, application performance, and cross-system portability.
 A powerful approach to achieving this balance is to decouple the different parts of describing a computation. 
 Instead of writing one monolithic computation, programmers separate the descriptions of the operation, the data format, and the execution schedule.
 RAJA, a portable parallel library for C++, provides an interface for this type of decoupling.
-However, RAJA lacks constructs for leveraging a key source of performance improvement: inter-kernel data reuse.
+However, RAJA lacks constructs for leveraging a key source of performance improvement: inter-kernel data locality and reduction.
 I propose the introduction of constructs to enable portable specification of cross-kernel optimizations for both dense and sparse codes.
 My key research question is: how do we enable program analyses and transformations in the context of a library rather than a compiler?
 I will answer this question with three contributions.
-My first contribution is a framework for supporting cross-kernel schedule transformation techniques in the library, specifically RAJA, rather than in the compiler. 
-This component has been completed as was publish in ICS2021.
+My first contribution is a framework for supporting cross-kernel schedule transformation techniques in a library, specifically RAJA, rather than in the compiler. 
+This contribution addresses the problem of encapsulating and analyzing computations in a library, as well as the generation of transformed kernels. 
+This component has been completed and was publish in ICS2021.
 My second contribution builds on this approach to allow developers to make data layout transformations, chosen by themselves or by a performance model.
+This contribution addresses the problem of adding data transformations between computations.
 This component is in progress and scheduled to be submitted for publication this Fall.
 My final contribution extends the layout transformation frameworks to support sparse codes.
+This will address research questions about the ergonomic specification and efficient execution of sparse computations through a library interface.
 I plan to complete this component over the next 18 months, split into collecting evaluation kernels, developing supporting the description of sparse computations, and developing a system to intelligently select format conversions.
 \end{abstract}
 
@@ -82,21 +86,21 @@ Computer simulation plays a foundational role in modern science and engineering.
 Considering the cost of a utility scale wind farm (upwards of 1 billion dollars), there is significant interest in making sure the farm will behave as expected.
 Computer simulation can help provide this certainty.
 
-There are three competing concerns that need balancing when considering the development process.
+When developing these codes, there are three competing concerns that need to be balanced.
 First is developer productivity.
 Code is expensive to write, especially when the authors are not programmers by trade.
 High-productivity languages like Python excel in the realm of developer productivity.
 While the actual execution of the code is slow, the ease of writing, maintaining, and updating the code can make up for the slow performance.
 However, this is context-dependent. 
 In many situations, such as HPC, the code also needs to run quickly.
-
+For instance, when simulating extreme weather events such as hurricanes~\cite{fu2017redesigning}, time is of the essence. 
+A simulation that takes three days to report what the state of events will be in two days is outperformed by a window.
 The second competing concern is exactly this: application performance.
 There are often real-world constraints on how long code execution can take.
 Consider the automatic breaking system in many modern vehicles.
 These systems do not have the luxury of running slowly, else they risk the safety of their passengers.
 On the other end, large simulation codes need to make the most out of the limited time they are allotted on HPC systems.
 Writing fast code runs at odds with programmer productivity in part because achieving good application performance normally requires the use of languages like C++ and Fortran, languages rarely lauded for their high developer productivity.
-
 The final competing concern, cross-system portability, runs in tension with both application performance and programmer productivity.
 Computing hardware is diversifying, meaning code optimized for one system may perform poorly on another.
 Finding one set of optimizations that give good performance across different systems is not straightforward, and not even always possible.
@@ -109,19 +113,22 @@ In the same vein, a single source code can support multiple systems by specializ
 
 By providing separation of concerns through a library interface, RAJA has a lower barrier to entry than other solutions, which often require specialized compilation pipelines. 
 Because RAJA is a library, developers of C++ applications can introduce a separation of concerns while using robust, production compilers like GCC and Clang.
-However, because RAJA code uses standard C++ compilers, it misses out on the powerful compiler-based optimizations of specialized programming languages.
+However, because RAJA code uses standard C++ compilers, it misses out on the powerful compiler-based optimizations of specialized programming languages, where semantic restrictions prevent complications like pointer aliasing.
 
 My dissertation will work towards remedying this trade off by incorporating compiler optimization techniques into the library itself and exposing their control to the developer. 
 My first contribution targets loop schedule transformations, my second data layout transformations, and my third sparse data formats.
 I evaluate each contribution by comparing its performance improvement to hand-implementing the same transformations.
 I also compare the source lines of code modified or added for each implementation.
 
-Before moving to the research plan (Section 2), the limitations of my proposal (Section 3), my proposed schedule (Section 4), and my data plan (Section 5), I give a short introductory example of how code using the RAJA library is written.
+Before moving to the research plan (\cref{Sec:Plan}), the limitations of my proposal (\autoref{Sec:Limitations}), my proposed schedule (\autoref{Sec:Schedule}), and my data plan (\autoref{Sec:DataPlan}), I give a short introductory example of how code using the RAJA library is written.
 
-I will be converting a standard C++ implementation of the \verb.HYDRO_2D. benchmark into RAJA. 
+\section{A RAJA Example}
+
+Four features of the RAJA library are fundamental to my approach to enabling inter-loop optimizations: execution primitives, the use of lambdas to represent loop bodies, separate iteration space definition and the View array wrapper class.
+To illustrate these features in action and to familiarize the reader with the library upon which my contributions are built, I convert a standard C++ implementation of the \verb.HYDRO_2D. benchmark into RAJA. 
 \verb.HYDRO_2D. is a typical stencil kernel extracted from a hydrodynamics code. 
-Listing~\ref{HydroCpp} shows the C++ implementation we will convert.
-Listing~\ref{HydroRaja} shows the RAJA implementation.
+\autoref{HydroCpp} shows the C++ implementation we will convert.
+\autoref{HydroRaja} shows the RAJA implementation.
 
 
 \begin{figure}
@@ -158,6 +165,10 @@ for (Index_type k=1 ; k<kn-1 ; k++) {
 
 \begin{figure}
     \begin{lstlisting}[caption={RAJA implementation of the \texttt{HYDRO\_2D} benchmark},label={HydroRaja}]
+View2D za(za_data,kn,jn); //data_ptr, extent1, extent2
+View2D zb(zb_data,kn,jn);
+/* similiar initialization for remaining arrays */
+
 auto lambda1 = [=](auto k, auto j) {
     za(k,j) = ( zp(k+1,j-1) + zq(k+1,j-1) - zp(k,j-1) - zq(k,j-1) ) *
                 ( zr(k,j) + zr(k,j-1) ) / ( zm(k,j-1) + zm(k+1,j-1) ); 
@@ -197,27 +208,36 @@ kernel<POL>(segment_tuple, lambda3);
 \end{lstlisting}
 \end{figure}
 
+The first step in the conversion process is to switch from using two dimensional arrays to using RAJA Views.
+The initialization of these Views are shown on lines 1-3 of Listing~\ref{HydroRaja}.
+Using Views rather than other storage types will be key for both gathering data access patterns and layout transformations.
 
-RAJA achieves performance portability by separating the specification of the computation from its schedule.
-This is reflected in the refactoring process.
-I will work with the first loop in the benchmark as an example.
-First, I extract a lambda describing the computation to be run each iteration of the loop.
-This can be seen in lines 1 through 6 of Listing~\ref{HydroRaja}.
-Second, I define the iteration space of the computation using a tuple of iterators. 
-These three loops have the same iteration space, so I can define one tuple and reuse it for each computation.
-The definition of the two dimensions and the complete tuple can be seen in lines 22 through 24 of Listing~\ref{HydroRaja}.
-Finally, I define the kernel's policy, which describes how each level of the computation should be executed. 
-The policy shown on lines 26 through 32 indicates that the outermost loop should be run in parallel using OpenMP, while the inner loop should be vectorized.
-With the three components now defined, we can execute the kernels using the \verb.kernel. function, shown on lines 34 through 36.
-This function immediately executes the specified computation.
+The second step in the conversion process is to extract lambdas that represent the loop bodies. 
+The three lambdas resulting lambdas are shown on lines 5-24 of \autoref{HydroRaja}.
+The parameters of the lambdas are the iterators of the loops.
+Note that these parameters are \verb.auto. type rather than \verb.int..
+This small change will enable the symbolic evaluation of the loop bodies using operator overloading.
+By passing in symbolic iterator types rather than integers, I can collect data access information to use in analyzing the computation.
 
-Note that the array accesses between Listings~\ref{HydroCpp} and~\ref{HydroRaja} have changed from bracket notation to the call operator. 
-This is because RAJA includes an optional array wrapper called the View, which is in used here.
-The use of Views rather than direct arrays is a key component to this proposal, as it is how I will gather access information to guide the transformation process.
+The third step in the conversion process is the definition of the iteration space for the computations.
+The \verb.RangeSegment. class is used to represent a contiguous range of iterator values.
+This class is used to define the \verb.k. and \verb.j. dimensions of the iteration space on lines 26 and 27. 
+Line 28 groups the dimensions together to create the entire iteration space.
+The iteration space specification will be a key component of the extension of RAJA to support sparse codes.
 
+The next step in the conversion process is the definition of the kernel execution policy. 
+Shown on lines 30-36 of \autoref{HydroRaja}, the kernel policy describes the schedule of the computation. 
+The schedule here indicates that the outer loop should be run in parallel using OpenMP while the inner loop should be vectorized. 
+Unlike the other components of the RAJA library, which I modify or extend to support inter-loop optimization, kernel execution policies present a challenge that constrain the design of my contributions.
 
+This challenge becomes clear on lines 38-40 of \autoref{HydroRaja}, which execute the computations.
+Note that unlike the iteration space and the lambda, the execution policy is a template argument to the call.
+Because new templates cannot be generated at runtime, templates for all possible transformations must be generated during compilation.
+Then, because the compiler must resolve the type of the execution calls, which could be using a transformed schedule based on the result of runtime analysis, all of the possible schedules must be bundled together as a single type.
+This considerably increases the complexity of the types in the system and restrict run-time choices to those that can be predicted at compile-time.
 
 \section{Research Plan}
+\label{Sec:Plan}
 This section details the research plan for the work proposed in the next three subsections. 
 The first describes an interface for specifying schedule transformations across multiple kernels in RAJA, such as loop fusion and overlapped tiling. 
 It also presents background on RAJA itself and some other underlying contributions utilized throughout this proposal.
@@ -676,7 +696,7 @@ In constrast to these specialized approaches, my approach seeks to support a wid
 
 
 \subsection{Proposed Research: Sparse Data Formats in RAJA}
-
+\label{Sec:Work3}
 Computations on sparse data are widespread. 
 For example, any simulation using unstructured meshes require some sort of sparse representation.
 While RAJA effectively separates concerns for dense codes, this is lost for sparse codes.
@@ -925,7 +945,7 @@ In contrast to my proposed approach, this framework relies heavily on a code gen
 
 Popoola~\nc presents an approach for generating code for converting between different sparse formats.
 Based on the Sparse Polyhedral Framework~\cite{strout2018sparse}, sparse formats are described using a number of relations between data and indices. 
-By composing relations that use the dense format as an intermediary, Popoola generates efficient transformations between arbitrary dense formats.
+By composing relations that use the dense format as an intermediary, Popoola generates efficient transformations between arbitrary sparse formats.
 
 
 \todo{libraries}
@@ -1027,7 +1047,7 @@ My Approach & & &
 % This problem is tied with how the accesses are made efficiently. 
 
 \section{Limitations}
-
+\label{Sec:Limitations}
 One self-imposed limitation of my proposal is the space of sparse formats I will support.
 Because I focus on CSF, Coordinate, and Dense formats, codes that use formats outside of this space will not be able to use my framework.
 More broadly, the impact of this work is partially limited by the host library RAJA. 
@@ -1042,6 +1062,7 @@ This is a familiar problem \todo{cite the papers from the EDSL class}, but its s
 
 
 \section{Project Schedule}
+\label{Sec:Schedule}
 I set out the following schedule for my dissertation research.
 
 \subsection{Data Layout Transformation Paper Resubmission}
@@ -1106,6 +1127,7 @@ Potential venues include PACT2023, SC2023, ICS2024,  OOPSLA2024, PPoPP2024, POPL
 \begin{itemize}
 \item Internship with HPE Chapel Group, \textbf{May - August 2022} 
 \item Publications Chair, International Workshop on OpenMP 2022, \textbf{May - September 2022}
+\item Registrations Chair, International Workshop on OpenMP 2022, \textbf{May - September 2022}
 \item Graduate and Professional Student Council Representative, \textbf{May 2021 - May 2023}
 \item Cultural Competency in Computing Fellowship, Cohort 2, \textbf{February 2022 - May 2023}
 \end{itemize}
