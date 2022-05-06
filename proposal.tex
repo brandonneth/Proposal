@@ -444,13 +444,15 @@ These results indicate that RAJALC is an accurate indicator of the performance e
 For code changes, RAJALC makes drastically fewer code changes than hand-implemented variants. 
 Especially for the overlapped tiling transformations, we see  10$\times$ fewer lines of code added for some benchmarks.
 \begin{figure}
-\includegraphics[width=0.5\textwidth]{RAJALC-perf-system-1.png}
-\caption{Performance changes of RAJAPerf benchmarks on System Intel1 (higher is better).}
-\label{RAJAPerfPerf}
+    \centering
+    \includegraphics[width=0.5\textwidth]{RAJALC-perf-system-1.png}
+    \caption{Performance changes of RAJAPerf benchmarks (higher is better).}
+    \label{RAJAPerfPerf}
 \end{figure}
 
 
 \begin{table}[t]
+    \centering
     \begin{tabular}{|l|l|l|l|l|}
     \hline
     \textbf{Benchmark}       & \multicolumn{2}{l|}{\textbf{\begin{tabular}[c]{@{}l@{}}Manual \\ Implementation\end{tabular}}} & \multicolumn{2}{l|}{\textbf{\begin{tabular}[c]{@{}l@{}}RAJALC\\ Implementation\end{tabular}}} \\ \hline
@@ -472,8 +474,51 @@ Especially for the overlapped tiling transformations, we see  10$\times$ fewer l
 
 
 
+
+
+\begin{figure}[h!]{}
+\centering 
+    \begin{subfigure}{.2\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{row-and-column-major-order.png}
+        \caption{Order in memory for row- and column-major layouts. Image \href{https://commons.wikimedia.org/w/index.php?curid=65107030}{by Cmglee - Own work, CC BY-SA 4.0}}
+        \label{fig:layouts}
+    \end{subfigure}
+    ~
+    \begin{subfigure}{.75\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{A-comparison-of-the-Array-of-Structs-AoS-and-Struct-of-Arrays-SoA-memory-layouts.png}
+        \caption{Array-of-Structs and Struct-of-Arrays layouts. Reproduced from \cite{pennycook2013investigation}. Layouts refer here to the structure of dense data storage.}
+        \label{fig:aossoa}
+    \end{subfigure}
+
+    \vspace{2mm}
+    \begin{subfigure}{\textwidth}
+        \centering
+        \includegraphics[width=0.85\textwidth,trim={0 0 0 0cm},clip]{Compressed-Sparse-Row-CSR-sparse-matrix-format-The-val-array-stores-the-nonzeros-by.png}
+        \caption{Sparse matrix vector multiply (SpMV) code. Dense and CSR storage formats for the same data. Empty squares indicate the fill value (zero). Reproduced from~\cite{mohammadi2018sparse}.
+        Formats here refer to the structure of sparse data storage.}
+        \label{fig:csr}
+    \end{subfigure}
+    
+    \vspace{2mm}
+
+
+    \begin{subfigure}{\textwidth}
+        \centering
+        \includegraphics[width=0.85\textwidth]{csf-formats.png}
+        \caption{Sparse data in Coordinate (COO) and Compressed Sparse Fiber (CSF) formats. Reproduced from~\cite{nisa2019load}.}
+        \label{fig:csf}
+    \end{subfigure}
+
+\caption{Four dense layouts and four sparse formats. Various authors.}
+\label{fig:formats}
+\end{figure}
+
+
 \subsection{Work in Progress: Data Transformations in RAJA}
 \label{Sec:Work2}
+
 The layout of data in memory is a key consideration in high performance computing applications.
 From reducing cache and page misses to relieving pressure on memory bandwidth and avoiding inter-process communication, using a good data layout improves performance at all levels of an application.
 RAJA's Views incorporate data layout as part of their initialization, allowing a user to try out different layouts without major refactoring costs.
@@ -507,7 +552,7 @@ We build on an important idea from them, but in the context of shared memory par
 Rather than only applying this data layout compiler technology automatically, we provide it to the user through a library interface while still enabling its automated use.
 Our library and runtime approach allows the user to guide use of the technology to focus on loops most likely to benefit from it.
 However, the library must perform its analysis and decision making at runtime and the interface must be high-level while still providing enough control. 
-These challenges lead to a number of sub-problems such as interface design so that the analysis cost is low (enough) while maintaining ease of use.
+These challenges lead to a number of sub-problems such as interface design so that the analysis cost is low while maintaining ease of use.
 A compiler approach can take longer and has all information that the language semantics provide.
 Some advantages of a library approach are that it is more accessible to users and the library implementation will have more information available, such as loop bounds, accessible at runtime before a loop executes.
 Although useful advantages, these lead to further sub-problems about how the library implementation can most leverage the compiler of the language in which it is embedded (C++ here) to force as much specialization as possible to achieve the ultimate goal of performance.
@@ -575,32 +620,21 @@ Three techniques may reduce the ILP-related costs.
 First, I do not currently save the overall model result, meaning the model is recreated and rerun multiple times throughout execution.
 Caching the model choice will amortize the run cost.
 Second, user choices are added to the ILP model as constraints.
-It may be beneficial to remove decision variables from the model so that only the variables the user has not made choices about are part of the problem.
+It may be beneficial to remove decision variables from the model so that only the variables the user has not made choices about are part of the formulation.
 Finally, if these approaches do not sufficiently reduce overhead, I can restrict the possible choices in the model to a subset of the possible layouts.
 Specifically, that subset would be the \enquote{ideal} layout for the traversal order and the layout the data is in when the computation begins.
-
+Overall, these improvements will be heuristic, as general data layout selection is NP-complete~\cite{kennedy1998automatic}.
 
 Finally, the data formats supported by the abstractions of the library bound the layout transformations the system can perform.
 The interface to RAJA Views only support dimensional reordering, like switching from row-major to column-major. 
 This change can provide performance improvement through reducing the distance between data elements accessed by successive iterations.
-The order of elements in memory for row- and column-major formats is shown in \autoref{major}.
+The order of elements in memory for row- and column-major layouts is shown in \autoref{fig:layouts}.
 Another popular data layout transformation is the conversion between struct-of-arrays and array-of-structs layouts. 
-These layouts are shown in \autoref{aossoa}.
-Because Views do not support struct-of-arrays formats, I am restricted to dimensional reordering transformations.
+These layouts are shown in \autoref{fig:aossoa}.
+Because Views do not support struct-of-arrays layouts, I am restricted to dimensional reordering transformations.
 However, it may be possible to introduce new components to RAJA to enable SoA-AoS transformations.
 
-\begin{figure}
-\includegraphics[height=2in]{row-and-column-major-order.png}
-\caption{Order in memory for row- and column-major storage formats. \href{https://commons.wikimedia.org/w/index.php?curid=65107030}{By Cmglee - Own work, CC BY-SA 4.0}}
-\label{major}
-\end{figure}
 
-
-\begin{figure}
-\includegraphics[height=2in]{A-comparison-of-the-Array-of-Structs-AoS-and-Struct-of-Arrays-SoA-memory-layouts.png}
-\caption{Pictoral description of array-of-structs versus struct-of-arrays data layout. Reproduced from \cite{pennycook2013investigation}.}
-\label{aossoa}
-\end{figure}
     
 \paragraph{Evalution:}
 
@@ -693,15 +727,11 @@ Computations on sparse data are widespread.
 For example, any simulation using unstructured meshes require some sort of sparse representation.
 While RAJA effectively separates concerns for dense codes, it does not for sparse codes.
 This is problematic when a developer wants to change the data format their computation uses.
-For instance, consider how data is indexed when using compressed sparse row (CSR) format, which is shown in Figure~\ref{csr}. 
+For instance, consider how data is indexed when using compressed sparse row (CSR) format, which is shown in Figure~\ref{fig:csr}. 
 The data format is baked directly into the description of the computation, so changing the format of the data requires extensive refactoring of all parts of the kernel.
 I propose extending RAJA's separation of concerns into the domain of sparse codes to enable the portable description of computations on sparse data.
 
-\begin{figure}
-\includegraphics[height=2in]{Compressed-Sparse-Row-CSR-sparse-matrix-format-The-val-array-stores-the-nonzeros-by.png}
-\caption{Dense and CSR storage formats for an example matrix. Reproduced from~\cite{mohammadi2018sparse}}
-\label{csr}
-\end{figure}
+
 \paragraph{Context and Background:}
 \begin{figure}
 
@@ -730,11 +760,11 @@ For CSR data, a poorly scheduled traversal can require a search for each access.
 This means that proper format and schedule choice can reduce the algorithmic complexity of the computation.
 
 
-\paragraph{Research Problems:}
+\paragraph{Research Questions:}
 \begin{enumerate}[label=Q3.\arabic*]
-    \item How do I extend the decoupling of data, operation, iteration space, and schedule description into the sparse context while maintaining idiomatically RAJA-like code?
-    \item How do I formulate format selection for sparse codes as an ILP problem, and how do I estimate the costs of different choices?
-    \item How do I support efficient iteration through sparse data without the ability to rewrite the operation for a particular format? 
+    \item How do I extend the decoupling of data, operation, iteration space, and schedule description into the sparse context while maintaining idiomatically RAJA-like code? \label{q:extend}
+    \item How do I support efficient iteration through sparse data without the ability to rewrite the operation for a particular format? \label{q:iteration}
+    \item How do I formulate format selection for sparse codes as an ILP problem, and how do I estimate the costs of different choices? \label{q:spselect}
 \end{enumerate}
 
 
@@ -965,7 +995,8 @@ In contrast, my approach is wholly contained within standard C++, avoiding the n
 \section{Limitations}
 \label{Sec:Limitations}
 One self-imposed limitation of my proposal is the space of sparse formats I will support.
-I limit myself to compressed sparse fiber (CSF)~\cite{smith2015tensor}, Coordinate, and Dense formats.
+I limit myself to compressed parse fiber (CSF)~\cite{smith2015tensor}, Coordinate (COO), and Dense formats; 
+COO and CSSF formats are shown in \autoref{fig:csf}.
 Thus, codes that use formats outside of this space will not be able to use my framework.
 More broadly, the impact of this work is partially limited by the host library RAJA. 
 However, a similar approach could be used in other libraries like Kokkos, or libraries for different languages all together.
@@ -1009,8 +1040,8 @@ I will design and implement sparse data format support within RAJA.
 I restrict the space of formats to N-dimensional compressed sparse fiber, dense, and coordinate storage formats.
 The system will support format-agnostic computation specification.
 I will implement the Evaluation Kernel Collection using my developed sparse data format support.
-This task will answer my research question about extending RAJA's decoupling into a sparse context while maintaining idiomatically RAJA-like code (R3.1).
-It will also answer my research question about supporting efficient iteration through sparse data without code generation (R3.4). 
+This task will answer my research question about extending RAJA's decoupling into a sparse context while maintaining idiomatically RAJA-like code (\ref{q:extend}).
+It will also answer my research question about supporting efficient iteration through sparse data without code generation (\ref{q:iteration}). 
 
 \paragraph{Deliverable, January 2023:} 
 Tests, examples, and implementation of sparse data format support within RAJA. 
@@ -1024,7 +1055,7 @@ I will model the sparse format selection problem as an ILP problem.
 I will then design and implement support for automatic selection of sparse format within RAJA.
 This system will generate and solve the formulated ILP problem to select format transformations.
 I will implement the Evaluation Kernel Collection using the sparse performance-model-driven system.
-This task will answer my research questions about formulating format selection as an ILP problem (R3.2) and efficiently estimating the cost of different format choices (R3.3).
+This task will answer my research questions about formulating format selection as an ILP problem and efficiently estimating the cost of different format choices (\ref{q:spselect}).
 
 \paragraph{Deliverable, March 2023:}
 Description of ILP formulation of sparse format selection problem.
@@ -1046,8 +1077,7 @@ Potential venues include Parallel Architectures and Compilation Techniques (PACT
 \subsection{Overlapping Professional Activities}
 \begin{itemize}
 \item Internship with HPE Chapel Group, \textbf{May - August 2022} 
-\item Publications Chair, International Workshop on OpenMP 2022, \textbf{May - September 2022}
-\item Registrations Chair, International Workshop on OpenMP 2022, \textbf{May - September 2022}
+\item Publications and Registrations Chair, International Workshop on OpenMP 2022, \textbf{May - September 2022}
 \item Graduate and Professional Student Council Representative, \textbf{May 2021 - May 2023}
 \item Cultural Competency in Computing Fellowship, Cohort 2, \textbf{February 2022 - May 2023}
 \end{itemize}
