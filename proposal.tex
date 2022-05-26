@@ -839,14 +839,14 @@ This is because only the non-zero entries of $A$ can change the value of $x(i)$.
 Thus, we need a way of reducing the iteration space to only the necessary points. 
 
 I propose a symbolic iteration description API like that in~\autoref{ForwardSolveRAJA}.
-Views will have a method \verb.nonzeros(i). that represent the non-zero index values of the $i$th dimension, shown on line 14. 
-Segment dimensions will have a method \verb.value(). that represents the current value of that iterator, allowing for triangular and other shaped iteration spaces, shown on line 15.
-Finally, operator overloading will allow for the combination multiple ranges.
-Line 15 of Listing~\ref{ForwardSolveRAJA} shows how this overloading could be used to combine the nonzero condition with the $j < i$ condition.
+Using this API, developers will create and combine symbolic dimension expressions.
+Dense dimensions can be described as normal, using \verb.RangeSegment.s and other existing RAJA constructs.
+Views will have a method \verb.nonzeros(i). that represent the index structure of their $i$th dimension.
+Dimension expressions can be used to define more complex dimension expressions through C++ operator overloading.
+Line 15 of Listing~\ref{ForwardSolveRAJA} shows how this overloading could be used to combine $A$'s index structure with the $j < i$ condition to create a sparse triangular iteration space.
 As the description of the sparse iteration space is built, no concrete iterator values are included.
 Instead, this description is purely symbolic until the iteration space description is used in a computation. 
 When a computation is executed, the iteration space description is evaluated to determine what the values of the iterators should be.
-
 
 
 \paragraph{Proposed Solution for Efficient Iteration:}
@@ -961,9 +961,8 @@ However, there are some important differences.
 First is the potential to reduce the algorithmic complexity of the computation. 
 This suggests that dynamic cost estimation via small benchmarks may not be best for capturing the potential costs.
 Ahrens, Kjolstad, and Amarasinghe~\cite{ahrens2021asymptotic} present a related approach to selecting schedules for sparse programs, and their cost modelling approach may be useful in selecting formats.
-The other major difference is the influence of the data's sparsity on the performance results. 
+Another difference is the influence of the data's sparsity on the performance results. 
 This will have to be incorporated into the model to accurately estimate the benefit of format changes.
-
 
 
 \paragraph{Related Work}
@@ -986,6 +985,7 @@ Kotlyar, Pingali, and Stodghill~\cite{kotlyar1997relational} present a framework
 A key component of their approach is modeling sparse structures as database relations between indices and values. 
 This reduces the compiler's task to that of identifying a good ordering of database join operations.
 However, their approach is limited to DO-ANY loops.
+DO-ANY loops do not preserve sequential semantics~\cite{wolfe1992doany}, so algorithms that rely on them cannot be expressed using this framework.
 Taichi~\cite{hu2019taichi} is a programming language for spatially sparse (globally sparse, locally dense) computations.
 Embedded into C++, computations are expressed as format-agnostic kernels, which are then optionally annotated with optimizations.
 Then, the Taichi compiler lowers the frontend code to an intermediate representation and finally to standard C++ or CUDA code. 
@@ -996,7 +996,7 @@ In contrast, my approach is wholly contained within standard C++, avoiding the n
 \label{Sec:Limitations}
 One self-imposed limitation of my proposal is the space of sparse formats I will support.
 I limit myself to compressed parse fiber (CSF)~\cite{smith2015tensor}, Coordinate (COO), and Dense formats; 
-COO and CSSF formats are shown in \autoref{fig:csf}.
+COO and CSF formats are shown in \autoref{fig:csf}.
 Thus, codes that use formats outside of this space will not be able to use my framework.
 More broadly, the impact of this work is partially limited by the host library RAJA. 
 However, a similar approach could be used in other libraries like Kokkos, or libraries for different languages all together.
